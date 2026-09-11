@@ -284,13 +284,10 @@ function ImpactMark({
   end,
   highlighted,
   opacity,
-  countryLabel,
 }: {
   end: THREE.Vector3;
   highlighted: boolean;
   opacity: number;
-  /** Shown on Earth at the impact point for the primary meteor */
-  countryLabel?: string | null;
 }) {
   const quat = useMemo(() => {
     const q = new THREE.Quaternion();
@@ -298,12 +295,6 @@ function ImpactMark({
     return q;
   }, [end]);
   if (opacity < 0.04) return null;
-  const label =
-    countryLabel === undefined
-      ? null
-      : countryLabel
-        ? countryLabel
-        : "Undetermined";
   return (
     <group position={end}>
       <mesh quaternion={quat}>
@@ -318,21 +309,6 @@ function ImpactMark({
           depthWrite={false}
         />
       </mesh>
-      {highlighted && label && (
-        <Html
-          center
-          distanceFactor={6}
-          style={{ pointerEvents: "none", opacity }}
-          zIndexRange={[80, 0]}
-        >
-          <div className="whitespace-nowrap rounded-md border border-amber-500/50 bg-slate-950/90 px-2 py-1 text-center shadow-lg shadow-black/50">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/90">
-              Potential impact
-            </p>
-            <p className="text-xs font-semibold text-amber-100">{label}</p>
-          </div>
-        </Html>
-      )}
     </group>
   );
 }
@@ -733,24 +709,28 @@ function Meteor({
           distance={1.1}
           decay={2}
         />
-        <Html
-          center
-          distanceFactor={7}
-          style={{ pointerEvents: "none", opacity }}
-          zIndexRange={[100, 0]}
-        >
-          <div
-            className={`-translate-y-6 whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] shadow-lg backdrop-blur-sm transition-opacity ${
-              hovered
-                ? "border-amber-400/80 bg-slate-950/90 text-amber-200 opacity-100"
-                : "border-slate-600/60 bg-slate-950/70 text-slate-200 opacity-80"
-            }`}
+        {/* Primary meteor label lives in the 2D HUD — avoid covering Earth.
+            Non-primary: tiny offset chip, stronger on hover. */}
+        {!highlighted && (
+          <Html
+            center
+            distanceFactor={9}
+            style={{ pointerEvents: "none", opacity }}
+            zIndexRange={[60, 0]}
           >
-            <span className="font-semibold text-cyan-200">{track.label}</span>
-            <span className="mx-1 text-slate-500">·</span>
-            <span className="font-bold text-amber-300">{track.ipLabel}</span>
-          </div>
-        </Html>
+            <div
+              className={`-translate-y-5 translate-x-3 whitespace-nowrap rounded border px-1 py-px font-mono text-[9px] shadow-md backdrop-blur-sm transition-opacity ${
+                hovered
+                  ? "border-amber-400/70 bg-slate-950/85 text-amber-200 opacity-100"
+                  : "border-slate-600/50 bg-slate-950/55 text-slate-300 opacity-55"
+              }`}
+            >
+              <span className="font-semibold text-cyan-200/90">{track.label}</span>
+              <span className="mx-0.5 text-slate-500">·</span>
+              <span className="font-bold text-amber-300/90">{track.ipLabel}</span>
+            </div>
+          </Html>
+        )}
       </group>
       <mesh visible={false} scale={headScale / 0.03}>
         <sphereGeometry args={[0.06, 8, 8]} />
@@ -1064,8 +1044,6 @@ function SceneContent({
   fireballs,
   showFireballs,
   showPlanets,
-  impactCountry,
-  impactCountryReady,
   selectedIds,
   primaryId,
   paused,
@@ -1080,8 +1058,6 @@ function SceneContent({
   fireballs: Fireball[];
   showFireballs: boolean;
   showPlanets: boolean;
-  impactCountry?: string | null;
-  impactCountryReady?: boolean;
   selectedIds: string[];
   primaryId?: string | null;
   paused: boolean;
@@ -1224,13 +1200,6 @@ function SceneContent({
               end={t.end}
               highlighted={t.id === primaryId}
               opacity={earthFade}
-              countryLabel={
-                t.id === primaryId &&
-                impactCountryReady &&
-                (progressRef?.current ?? progress) >= 0.92
-                  ? impactCountry ?? null
-                  : undefined
-              }
             />
             <Meteor
               track={t}
@@ -1291,7 +1260,7 @@ export default function EarthGlobe({
   const [lodMode, setLodMode] = useState<LodMode>("earth");
   const blendRef = useRef(0);
 
-  const activeIds = selectedIds ?? [];
+  const activeIds = useMemo(() => selectedIds ?? [], [selectedIds]);
 
   const earthPos = useMemo(() => earthHeliocentricPosition(), []);
   const camPos = useMemo(
@@ -1333,6 +1302,33 @@ export default function EarthGlobe({
     return n + (r && orbits[r.des]?.available ? 1 : 0);
   }, 0);
 
+  const primaryRisk = useMemo(() => {
+    if (primaryId) {
+      const hit = risks.find((r) => (r.id || r.des) === primaryId);
+      if (hit) return hit;
+    }
+    if (activeIds.length) {
+      return risks.find((r) => activeIds.includes(r.id || r.des)) ?? null;
+    }
+    return null;
+  }, [risks, primaryId, activeIds]);
+
+  const primaryHudLabel = primaryRisk ? displayName(primaryRisk) : null;
+  const primaryHudIp = primaryRisk
+    ? formatImpactPercent(parseFloat(primaryRisk.ip) || 0)
+    : null;
+
+  const showImpactHud =
+    Boolean(impactCountryReady) && progress >= 0.92 && lodMode !== "solar";
+  const impactHudCountry = impactCountry?.trim() ? impactCountry : "Undetermined";
+
+  const modeLabel =
+    lodMode === "solar"
+      ? "Solar system"
+      : lodMode === "blend"
+        ? "Zooming…"
+        : "Near Earth";
+
   if (!mounted) {
     return (
       <div
@@ -1343,13 +1339,6 @@ export default function EarthGlobe({
       </div>
     );
   }
-
-  const modeLabel =
-    lodMode === "solar"
-      ? "Solar system"
-      : lodMode === "blend"
-        ? "Zooming…"
-        : "Near Earth";
 
   return (
     <div
@@ -1368,6 +1357,33 @@ export default function EarthGlobe({
           Play follows meteor · drag overrides · scroll zooms
         </p>
       </div>
+
+      {/* Compact HUD — keeps name / IP / impact country off the globe face */}
+      {(primaryHudLabel || showImpactHud) && lodMode !== "solar" && (
+        <div className="pointer-events-none absolute right-2 top-[3.25rem] z-20 flex max-w-[min(46%,11.5rem)] flex-col items-end gap-1 sm:right-3 sm:top-14 sm:max-w-[13rem]">
+          {primaryHudLabel && (
+            <div className="whitespace-nowrap rounded-full border border-cyan-500/40 bg-slate-950/80 px-1.5 py-0.5 font-mono text-[9px] leading-tight text-slate-100 shadow-md shadow-black/40 backdrop-blur-sm sm:text-[10px]">
+              <span className="font-semibold text-cyan-200">{primaryHudLabel}</span>
+              {primaryHudIp && (
+                <>
+                  <span className="mx-0.5 text-slate-500">·</span>
+                  <span className="font-bold text-amber-300">{primaryHudIp}</span>
+                </>
+              )}
+            </div>
+          )}
+          {showImpactHud && (
+            <div className="rounded-md border border-amber-500/45 bg-slate-950/85 px-1.5 py-0.5 text-right shadow-md shadow-black/40 backdrop-blur-sm">
+              <p className="text-[8px] font-semibold uppercase tracking-wide text-amber-200/85 sm:text-[9px]">
+                Potential impact
+              </p>
+              <p className="truncate text-[9px] font-semibold text-amber-100 sm:text-[10px]">
+                {impactHudCountry}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div
         className="h-[42vh] w-full min-h-[240px] touch-none overscroll-none sm:h-[min(70vh,720px)] sm:min-h-[420px]"
@@ -1396,8 +1412,6 @@ export default function EarthGlobe({
               fireballs={fireballs}
               showFireballs={showFireballs}
               showPlanets={showPlanets}
-              impactCountry={impactCountry}
-              impactCountryReady={impactCountryReady}
               selectedIds={activeIds}
               primaryId={primaryId}
               paused={paused}
