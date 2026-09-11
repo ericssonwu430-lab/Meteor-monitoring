@@ -83,6 +83,7 @@ export default function GlobeSection({
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [lodMode, setLodMode] = useState<LodMode>("earth");
+  const [showFireballs, setShowFireballs] = useState(true);
   const [orbits, setOrbits] = useState<Record<string, OrbitElements>>({});
   const [orbitLoading, setOrbitLoading] = useState<Record<string, boolean>>({});
   const orbitCache = useRef<Record<string, OrbitElements>>({});
@@ -398,6 +399,9 @@ export default function GlobeSection({
         <EarthGlobe
           risks={risks}
           fireballs={fireballs}
+          showFireballs={showFireballs}
+          impactCountry={impactCountry}
+          impactCountryReady={impactCountryReady}
           selectedIds={selectedList}
           primaryId={primaryId}
           progress={progress}
@@ -417,7 +421,6 @@ export default function GlobeSection({
           labelStart={timelineDates.labelStart}
           labelMid={labelMid}
           labelEnd={timelineDates.labelEnd}
-          impactCountry={impactCountryReady ? impactCountry : undefined}
           disabled={selectedList.length === 0}
           compact
           className="rounded-b-xl border border-t-0 border-slate-700/80"
@@ -541,9 +544,34 @@ export default function GlobeSection({
             )}
 
             {tab === "activity" && (
-              <div className="grid gap-3 lg:grid-cols-2">
-                <FireballMap fireballs={fireballs} />
-                <Timeline approaches={approaches} fireballs={fireballs} />
+              <div className="space-y-3">
+                <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-xs leading-relaxed text-slate-300">
+                  <strong className="text-slate-100">Fireballs</strong> are very
+                  bright meteors — space rocks that already entered Earth&apos;s
+                  atmosphere and flared. This feed is from NASA/JPL US-sensor
+                  detections (time, energy, often lat/lon). They are past events,
+                  not the same as Sentry&apos;s future impact-risk asteroids.
+                </div>
+                <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-200">
+                  <span>Show fireballs on the 3D map</span>
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 accent-cyan-500"
+                    checked={showFireballs}
+                    onChange={(e) => setShowFireballs(e.target.checked)}
+                    aria-label="Toggle fireball visuals on the globe"
+                  />
+                </label>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {showFireballs ? (
+                    <FireballMap fireballs={fireballs} />
+                  ) : (
+                    <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 text-center text-xs text-slate-500">
+                      Fireball map hidden — turn the toggle on to view.
+                    </div>
+                  )}
+                  <Timeline approaches={approaches} fireballs={fireballs} />
+                </div>
               </div>
             )}
 

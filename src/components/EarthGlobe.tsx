@@ -51,6 +51,11 @@ export type LodMode = "earth" | "solar" | "blend";
 type Props = {
   risks: RiskEvent[];
   fireballs: Fireball[];
+  /** When false, hide fireball flashes on the globe */
+  showFireballs?: boolean;
+  /** Best-effort impact country for the primary meteor (shown on Earth) */
+  impactCountry?: string | null;
+  impactCountryReady?: boolean;
   selectedIds?: string[];
   primaryId?: string | null;
   className?: string;
@@ -267,10 +272,13 @@ function ImpactMark({
   end,
   highlighted,
   opacity,
+  countryLabel,
 }: {
   end: THREE.Vector3;
   highlighted: boolean;
   opacity: number;
+  /** Shown on Earth at the impact point for the primary meteor */
+  countryLabel?: string | null;
 }) {
   const quat = useMemo(() => {
     const q = new THREE.Quaternion();
@@ -278,19 +286,42 @@ function ImpactMark({
     return q;
   }, [end]);
   if (opacity < 0.04) return null;
+  const label =
+    countryLabel === undefined
+      ? null
+      : countryLabel
+        ? countryLabel
+        : "Undetermined";
   return (
-    <mesh position={end} quaternion={quat}>
-      <ringGeometry
-        args={highlighted ? [0.028, 0.048, 24] : [0.02, 0.034, 20]}
-      />
-      <meshBasicMaterial
-        color={highlighted ? "#f87171" : "#fb923c"}
-        transparent
-        opacity={(highlighted ? 0.85 : 0.45) * opacity}
-        side={THREE.DoubleSide}
-        depthWrite={false}
-      />
-    </mesh>
+    <group position={end}>
+      <mesh quaternion={quat}>
+        <ringGeometry
+          args={highlighted ? [0.028, 0.048, 24] : [0.02, 0.034, 20]}
+        />
+        <meshBasicMaterial
+          color={highlighted ? "#f87171" : "#fb923c"}
+          transparent
+          opacity={(highlighted ? 0.85 : 0.45) * opacity}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      {highlighted && label && (
+        <Html
+          center
+          distanceFactor={6}
+          style={{ pointerEvents: "none", opacity }}
+          zIndexRange={[80, 0]}
+        >
+          <div className="whitespace-nowrap rounded-md border border-amber-500/50 bg-slate-950/90 px-2 py-1 text-center shadow-lg shadow-black/50">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/90">
+              Potential impact
+            </p>
+            <p className="text-xs font-semibold text-amber-100">{label}</p>
+          </div>
+        </Html>
+      )}
+    </group>
   );
 }
 
@@ -950,6 +981,9 @@ function LodController({
 function SceneContent({
   risks,
   fireballs,
+  showFireballs,
+  impactCountry,
+  impactCountryReady,
   selectedIds,
   primaryId,
   paused,
@@ -961,6 +995,9 @@ function SceneContent({
 }: {
   risks: RiskEvent[];
   fireballs: Fireball[];
+  showFireballs: boolean;
+  impactCountry?: string | null;
+  impactCountryReady?: boolean;
   selectedIds: string[];
   primaryId?: string | null;
   paused: boolean;
@@ -1067,6 +1104,11 @@ function SceneContent({
               end={t.end}
               highlighted={t.id === primaryId}
               opacity={earthFade}
+              countryLabel={
+                t.id === primaryId && impactCountryReady
+                  ? impactCountry ?? null
+                  : undefined
+              }
             />
             <Meteor
               track={t}
@@ -1076,11 +1118,13 @@ function SceneContent({
             />
           </group>
         ))}
-        <FireballImpacts
-          fireballs={fireballs}
-          paused={paused}
-          opacity={earthFade}
-        />
+        {showFireballs && (
+          <FireballImpacts
+            fireballs={fireballs}
+            paused={paused}
+            opacity={earthFade}
+          />
+        )}
       </group>
 
       <OrbitControls
@@ -1105,6 +1149,9 @@ function SceneContent({
 export default function EarthGlobe({
   risks,
   fireballs,
+  showFireballs = true,
+  impactCountry = null,
+  impactCountryReady = false,
   selectedIds,
   primaryId,
   className,
@@ -1221,6 +1268,9 @@ export default function EarthGlobe({
             <SceneContent
               risks={risks}
               fireballs={fireballs}
+              showFireballs={showFireballs}
+              impactCountry={impactCountry}
+              impactCountryReady={impactCountryReady}
               selectedIds={activeIds}
               primaryId={primaryId}
               paused={paused}
@@ -1238,7 +1288,9 @@ export default function EarthGlobe({
         <span>
           {lodMode === "solar"
             ? `${keplerCount}/${activeIds.length} Keplerian orbit${keplerCount === 1 ? "" : "s"}`
-            : `${activeIds.length} trail${activeIds.length === 1 ? "" : "s"} · ${fbCount} fireballs`}
+            : `${activeIds.length} trail${activeIds.length === 1 ? "" : "s"}${
+                showFireballs ? ` · ${fbCount} fireballs` : ""
+              }`}
           {orbitsLoading ? " · loading SBDB…" : ""}
           {paused ? " · tab paused" : ""}
         </span>
