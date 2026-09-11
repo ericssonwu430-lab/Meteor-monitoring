@@ -908,7 +908,7 @@ function FollowCamera({
   useFrame((_, dt) => {
     const controls = controlsRef.current;
 
-    // After playback hits the end: ease camera out to a clear Earth overview
+    // After playback hits the end: ease out to face the impact side of Earth
     if (zoomOutActive.current && !playing && controls) {
       if (userOverride.current) {
         zoomOutActive.current = false;
@@ -917,8 +917,20 @@ function FollowCamera({
       }
       followActiveRef.current = true;
       const overviewDist = 3.45;
-      const preferred = new THREE.Vector3(0.25, 0.45, 1).normalize();
-      desiredTarget.current.copy(earthPos);
+      // Place camera along impact outward normal so the hit / ring faces the viewer
+      const preferred = primaryTrack
+        ? primaryTrack.end
+            .clone()
+            .normalize()
+            .add(new THREE.Vector3(0, 0.22, 0))
+            .normalize()
+        : new THREE.Vector3(0.25, 0.45, 1).normalize();
+      const impactDir = primaryTrack
+        ? primaryTrack.end.clone().normalize()
+        : preferred;
+      desiredTarget.current
+        .copy(earthPos)
+        .addScaledVector(impactDir, 0.12);
       desiredCam.current
         .copy(earthPos)
         .addScaledVector(preferred, overviewDist);
@@ -1109,6 +1121,8 @@ function SceneContent({
   const solarFade = blend;
   // Show small Earth marker once detailed globe has mostly faded
   const showSolarEarth = blend > 0.55;
+  // Hold continents still so the impact ring stays meaningful at time-bar end
+  const impactOverviewHold = !playing && progress >= 0.99;
 
   return (
     <>
@@ -1186,7 +1200,10 @@ function SceneContent({
           intensity={0.55 * earthFade}
           color="#fff7ed"
         />
-        <EarthWithFallback autoRotate={!paused} opacity={earthFade} />
+        <EarthWithFallback
+          autoRotate={!paused && !impactOverviewHold}
+          opacity={earthFade}
+        />
         {visibleTracks.map((t) => (
           <group key={t.id}>
             <TrajectoryRibbon
