@@ -1,16 +1,19 @@
 "use client";
 
+import type { LodMode } from "@/components/EarthGlobe";
+
 type Props = {
   progress: number;
   playing: boolean;
   onProgressChange: (t: number) => void;
   onPlayingChange: (playing: boolean) => void;
-  viewMode: "earth" | "solar";
+  lodMode?: LodMode;
   labelStart?: string;
   labelMid?: string;
   labelEnd?: string;
   disabled?: boolean;
   className?: string;
+  compact?: boolean;
 };
 
 export default function TrajectoryTimeline({
@@ -18,41 +21,47 @@ export default function TrajectoryTimeline({
   playing,
   onProgressChange,
   onPlayingChange,
-  viewMode,
+  lodMode = "earth",
   labelStart,
   labelMid,
   labelEnd,
   disabled,
   className,
+  compact,
 }: Props) {
   const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
+  const solarish = lodMode === "solar" || lodMode === "blend";
   const start =
-    labelStart ?? (viewMode === "earth" ? "Approach" : "Orbit start");
-  const mid = labelMid ?? (viewMode === "earth" ? "Entry" : "¼ orbit");
-  const end = labelEnd ?? (viewMode === "earth" ? "Impact zone" : "Full orbit");
+    labelStart ?? (solarish ? "Orbit start" : "Approach");
+  const end =
+    labelEnd ??
+    labelMid ??
+    (solarish ? "Full orbit" : "Impact zone");
 
   return (
     <div
-      className={`border-t border-slate-800/80 bg-slate-950/95 px-3 py-2.5 ${
+      className={`${compact ? "px-2 py-1.5" : "px-3 py-2"} border-t border-slate-800/80 bg-slate-950/95 ${
         disabled ? "opacity-50" : ""
       } ${className ?? ""}`}
     >
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
-          Trajectory timeline
-        </p>
-        <p className="font-mono text-[10px] text-slate-500">{pct}%</p>
-      </div>
+      {!compact && (
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
+            Trajectory
+          </p>
+          <p className="font-mono text-[10px] text-slate-500">{pct}%</p>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <button
           type="button"
           disabled={disabled}
           onClick={() => onPlayingChange(!playing)}
-          className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-slate-600 px-3 text-sm font-medium text-slate-200 hover:border-cyan-600 hover:text-cyan-300 disabled:cursor-not-allowed"
+          className="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg border border-slate-600 px-2.5 text-sm font-medium text-slate-200 hover:border-cyan-600 hover:text-cyan-300 disabled:cursor-not-allowed"
           aria-label={playing ? "Pause" : "Play"}
         >
-          {playing ? "Pause" : "Play"}
+          {playing ? "⏸" : "▶"}
         </button>
 
         <div className="min-w-0 flex-1">
@@ -72,7 +81,7 @@ export default function TrajectoryTimeline({
           />
           <div className="flex justify-between text-[10px] text-slate-500">
             <span>{start}</span>
-            <span>{mid}</span>
+            <span className="font-mono text-slate-600">{pct}%</span>
             <span>{end}</span>
           </div>
         </div>

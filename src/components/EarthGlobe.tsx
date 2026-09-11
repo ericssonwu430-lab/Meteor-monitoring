@@ -8,9 +8,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type MutableRefObject,
   type ReactNode,
 } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Html,
   Line,
@@ -20,15 +21,23 @@ import {
   useTexture,
 } from "@react-three/drei";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
 import { formatImpactPercent } from "@/lib/format";
-import SolarSystemView from "@/components/SolarSystemView";
+import SolarSystemView, {
+  AU_SCALE,
+  earthHeliocentricPosition,
+} from "@/components/SolarSystemView";
 
 const EARTH_RADIUS = 1;
 const MAX_METEORS = 22;
 const MAX_FIREBALLS = 40;
 const TRAIL_SEGMENTS = 28;
 const SPARK_COUNT = 8;
+
+/** Camera distance from Earth: fully near-Earth LOD below NEAR, fully solar above FAR. */
+const LOD_NEAR = 5.5;
+const LOD_FAR = 16;
 
 const EARTH_DIFFUSE =
   "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg";
@@ -37,21 +46,20 @@ const EARTH_SPECULAR =
 const EARTH_CLOUDS =
   "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_clouds_1024.png";
 
-export type GlobeViewMode = "earth" | "solar";
+export type LodMode = "earth" | "solar" | "blend";
 
 type Props = {
   risks: RiskEvent[];
   fireballs: Fireball[];
-  /** Ids of meteors whose trails should animate on the globe */
   selectedIds?: string[];
   primaryId?: string | null;
   className?: string;
-  viewMode?: GlobeViewMode;
-  /** Shared 0..1 scrub progress for trajectory / Keplerian position */
   progress?: number;
   playing?: boolean;
   orbits?: Record<string, OrbitElements>;
   orbitsLoading?: boolean;
+  /** Fires when continuous-zoom LOD changes */
+  onLodChange?: (info: { blend: number; distance: number; mode: LodMode }) => void;
 };
 
 type MeteorTrack = {
@@ -94,6 +102,11 @@ function hashString(s: string): number {
 function seededUnit(seed: number, salt: number): number {
   const x = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
   return x - Math.floor(x);
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
 }
 
 function latLonToVec3(lat: number, lon: number, radius: number): THREE.Vector3 {
@@ -177,7 +190,6 @@ function bezierTangent(
   t: number,
   out: THREE.Vector3
 ) {
-  // derivative of quadratic bezier
   out.set(0, 0, 0);
   out.addScaledVector(a, 2 * (t - 1));
   out.addScaledVector(b, 2 - 4 * t);
@@ -185,7 +197,12 @@ function bezierTangent(
   return out.normalize();
 }
 
-function sampleBezier(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, n = 56): THREE.Vector3[] {
+function sampleBezier(
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  c: THREE.Vector3,
+  n = 56
+): THREE.Vector3[] {
   const pts: THREE.Vector3[] = [];
   const tmp = new THREE.Vector3();
   for (let i = 0; i <= n; i++) {
@@ -199,10 +216,12 @@ function TrajectoryRibbon({
   track,
   progress,
   highlighted,
+  opacity,
 }: {
   track: MeteorTrack;
   progress: number;
   highlighted: boolean;
+  opacity: number;
 }) {
   const fullPts = useMemo(
     () => sampleBezier(track.start, track.mid, track.end, 56),
@@ -216,10 +235,18 @@ function TrajectoryRibbon({
 
   const tube = useMemo(() => {
     const curve = new THREE.CatmullRomCurve3(fullPts);
-    return new THREE.TubeGeometry(curve, 48, highlighted ? 0.016 : 0.01, 6, false);
+    return new THREE.TubeGeometry(
+      curve,
+      48,
+      highlighted ? 0.016 : 0.01,
+      6,
+      false
+    );
   }, [fullPts, highlighted]);
 
   useEffect(() => () => tube.dispose(), [tube]);
+
+  if (opacity < 0.04) return null;
 
   return (
     <group>
@@ -227,7 +254,7 @@ function TrajectoryRibbon({
         <meshBasicMaterial
           color={highlighted ? "#fb923c" : "#64748b"}
           transparent
-          opacity={highlighted ? 0.38 : 0.22}
+          opacity={(highlighted ? 0.38 : 0.22) * opacity}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           side={THREE.DoubleSide}
@@ -238,26 +265,37 @@ function TrajectoryRibbon({
         color={highlighted ? "#fdba74" : "#94a3b8"}
         lineWidth={highlighted ? 2.6 : 1.6}
         transparent
-        opacity={0.95}
+        opacity={0.95 * opacity}
         depthWrite={false}
       />
     </group>
   );
 }
 
-function ImpactMark({ end, highlighted }: { end: THREE.Vector3; highlighted: boolean }) {
+function ImpactMark({
+  end,
+  highlighted,
+  opacity,
+}: {
+  end: THREE.Vector3;
+  highlighted: boolean;
+  opacity: number;
+}) {
   const quat = useMemo(() => {
     const q = new THREE.Quaternion();
     q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), end.clone().normalize());
     return q;
   }, [end]);
+  if (opacity < 0.04) return null;
   return (
     <mesh position={end} quaternion={quat}>
-      <ringGeometry args={highlighted ? [0.028, 0.048, 24] : [0.02, 0.034, 20]} />
+      <ringGeometry
+        args={highlighted ? [0.028, 0.048, 24] : [0.02, 0.034, 20]}
+      />
       <meshBasicMaterial
         color={highlighted ? "#f87171" : "#fb923c"}
         transparent
-        opacity={highlighted ? 0.85 : 0.45}
+        opacity={(highlighted ? 0.85 : 0.45) * opacity}
         side={THREE.DoubleSide}
         depthWrite={false}
       />
@@ -276,13 +314,13 @@ function useEarthSpin(autoRotate: boolean) {
   return { earthRef, cloudRef };
 }
 
-function Atmosphere() {
+function Atmosphere({ opacity = 1 }: { opacity?: number }) {
   return (
     <Sphere args={[EARTH_RADIUS * 1.045, 32, 32]}>
       <meshBasicMaterial
         color="#38bdf8"
         transparent
-        opacity={0.08}
+        opacity={0.08 * opacity}
         side={THREE.BackSide}
         depthWrite={false}
       />
@@ -290,7 +328,13 @@ function Atmosphere() {
   );
 }
 
-function TexturedEarth({ autoRotate }: { autoRotate: boolean }) {
+function TexturedEarth({
+  autoRotate,
+  opacity,
+}: {
+  autoRotate: boolean;
+  opacity: number;
+}) {
   const { earthRef, cloudRef } = useEarthSpin(autoRotate);
   const [map, spec, clouds] = useTexture(
     [EARTH_DIFFUSE, EARTH_SPECULAR, EARTH_CLOUDS],
@@ -303,45 +347,55 @@ function TexturedEarth({ autoRotate }: { autoRotate: boolean }) {
   );
 
   return (
-    <group>
+    <group visible={opacity > 0.02}>
       <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
         <meshPhongMaterial
           map={map}
           specularMap={spec}
           specular={new THREE.Color("#335566")}
           shininess={12}
+          transparent={opacity < 0.98}
+          opacity={opacity}
         />
       </Sphere>
       <Sphere ref={cloudRef} args={[EARTH_RADIUS * 1.015, 48, 48]}>
         <meshPhongMaterial
           map={clouds}
           transparent
-          opacity={0.35}
+          opacity={0.35 * opacity}
           depthWrite={false}
         />
       </Sphere>
-      <Atmosphere />
+      <Atmosphere opacity={opacity} />
     </group>
   );
 }
 
-function ProceduralEarth({ autoRotate }: { autoRotate: boolean }) {
+function ProceduralEarth({
+  autoRotate,
+  opacity,
+}: {
+  autoRotate: boolean;
+  opacity: number;
+}) {
   const { earthRef, cloudRef } = useEarthSpin(autoRotate);
   return (
-    <group>
+    <group visible={opacity > 0.02}>
       <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
         <meshPhongMaterial
           color="#1d4f8c"
           emissive="#0a1f33"
           specular="#4a90a4"
           shininess={18}
+          transparent={opacity < 0.98}
+          opacity={opacity}
         />
       </Sphere>
       <Sphere args={[EARTH_RADIUS * 1.002, 48, 48]}>
         <meshBasicMaterial
           color="#1a7a4c"
           transparent
-          opacity={0.28}
+          opacity={0.28 * opacity}
           depthWrite={false}
         />
       </Sphere>
@@ -349,34 +403,45 @@ function ProceduralEarth({ autoRotate }: { autoRotate: boolean }) {
         <meshPhongMaterial
           color="#e2e8f0"
           transparent
-          opacity={0.1}
+          opacity={0.1 * opacity}
           depthWrite={false}
         />
       </Sphere>
-      <Atmosphere />
+      <Atmosphere opacity={opacity} />
     </group>
   );
 }
 
-function EarthWithFallback({ autoRotate }: { autoRotate: boolean }) {
+function EarthWithFallback({
+  autoRotate,
+  opacity,
+}: {
+  autoRotate: boolean;
+  opacity: number;
+}) {
   return (
-    <TextureErrorBoundary fallback={<ProceduralEarth autoRotate={autoRotate} />}>
-      <Suspense fallback={<ProceduralEarth autoRotate={autoRotate} />}>
-        <TexturedEarth autoRotate={autoRotate} />
+    <TextureErrorBoundary
+      fallback={<ProceduralEarth autoRotate={autoRotate} opacity={opacity} />}
+    >
+      <Suspense
+        fallback={<ProceduralEarth autoRotate={autoRotate} opacity={opacity} />}
+      >
+        <TexturedEarth autoRotate={autoRotate} opacity={opacity} />
       </Suspense>
     </TextureErrorBoundary>
   );
 }
 
-/** Realistic shooting-star: elongated glowing head + tapered multi-layer trail + sparks */
 function Meteor({
   track,
   progress,
   highlighted,
+  opacity,
 }: {
   track: MeteorTrack;
   progress: number;
   highlighted: boolean;
+  opacity: number;
 }) {
   const headRef = useRef<THREE.Group>(null);
   const coreTrailRef = useRef<THREE.Line>(null);
@@ -470,11 +535,15 @@ function Meteor({
   }, [coreLine, glowLine, coreGeom, glowGeom, sparkGeom, sparkMat]);
 
   useFrame((_, dt) => {
+    if (opacity < 0.04) {
+      if (headRef.current) headRef.current.visible = false;
+      if (sparksRef.current) sparksRef.current.visible = false;
+      return;
+    }
     const t = Math.min(1, Math.max(0, progress));
     bezierPoint(track.start, track.mid, track.end, t, pos.current);
     bezierTangent(track.start, track.mid, track.end, t, dir.current);
 
-    // Brighten near atmosphere entry
     const entryBoost = t > 0.55 ? 0.6 + (t - 0.55) * 1.8 : 0.45;
     const fadeOut = t > 0.92 ? 1 - (t - 0.92) / 0.08 : 1;
     const sizeBoost = highlighted ? 1.2 : 1;
@@ -496,18 +565,20 @@ function Meteor({
       const attr = geom.getAttribute("position") as THREE.BufferAttribute;
       const trailLen = highlighted ? 0.16 : 0.12;
       for (let i = 0; i < TRAIL_SEGMENTS; i++) {
-        const tt = Math.max(0, t - trailLen * (1 - i / Math.max(1, TRAIL_SEGMENTS - 1)));
+        const tt = Math.max(
+          0,
+          t - trailLen * (1 - i / Math.max(1, TRAIL_SEGMENTS - 1))
+        );
         bezierPoint(track.start, track.mid, track.end, tt, tmp.current);
         attr.setXYZ(i, tmp.current.x, tmp.current.y, tmp.current.z);
       }
       attr.needsUpdate = true;
-      mat.opacity = baseOpacity * entryBoost * fadeOut;
+      mat.opacity = baseOpacity * entryBoost * fadeOut * opacity;
     };
 
     writeTrail(coreGeom, coreLine.material as THREE.LineBasicMaterial, 0.95);
     writeTrail(glowGeom, glowLine.material as THREE.LineBasicMaterial, 0.5);
 
-    // Brief spark particles trailing behind the head
     if (sparksRef.current) {
       const attr = sparkGeom.getAttribute("position") as THREE.BufferAttribute;
       const ages = sparkGeom.getAttribute("age") as THREE.BufferAttribute;
@@ -530,10 +601,13 @@ function Meteor({
       }
       attr.needsUpdate = true;
       ages.needsUpdate = true;
-      sparkMat.opacity = 0.7 * entryBoost * fadeOut * (hovered ? 1 : 0.85);
+      sparkMat.opacity =
+        0.7 * entryBoost * fadeOut * opacity * (hovered ? 1 : 0.85);
       sparksRef.current.visible = fadeOut > 0.08;
     }
   });
+
+  if (opacity < 0.04) return null;
 
   const headScale = track.size;
 
@@ -555,62 +629,57 @@ function Meteor({
           document.body.style.cursor = "auto";
         }}
       >
-        {/* Outer orange/red glow shell */}
         <mesh>
           <sphereGeometry args={[0.055, 16, 16]} />
           <meshBasicMaterial
             color="#ef4444"
             transparent
-            opacity={0.22}
+            opacity={0.22 * opacity}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
           />
         </mesh>
-        {/* Mid orange glow */}
         <mesh>
           <sphereGeometry args={[0.038, 14, 14]} />
           <meshBasicMaterial
             color="#fb923c"
             transparent
-            opacity={0.45}
+            opacity={0.45 * opacity}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
           />
         </mesh>
-        {/* Hot white/yellow core */}
         <mesh>
           <sphereGeometry args={[0.018, 12, 12]} />
           <meshBasicMaterial
             color="#fffbeb"
             transparent
-            opacity={0.95}
+            opacity={0.95 * opacity}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
           />
         </mesh>
-        {/* Elongated fireball / tapered cone pointing opposite travel (trail side) */}
         <mesh rotation={[Math.PI, 0, 0]} position={[0, -0.04, 0]}>
           <coneGeometry args={[0.028, 0.11, 10, 1, true]} />
           <meshBasicMaterial
             color="#f97316"
             transparent
-            opacity={0.55}
+            opacity={0.55 * opacity}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
             side={THREE.DoubleSide}
           />
         </mesh>
-        {/* Inner luminous taper */}
         <mesh rotation={[Math.PI, 0, 0]} position={[0, -0.03, 0]}>
           <coneGeometry args={[0.012, 0.08, 8, 1, true]} />
           <meshBasicMaterial
             color="#fef08a"
             transparent
-            opacity={0.75}
+            opacity={0.75 * opacity}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
@@ -619,14 +688,14 @@ function Meteor({
         </mesh>
         <pointLight
           color="#fdba74"
-          intensity={hovered ? 2.2 : 1.35}
+          intensity={(hovered ? 2.2 : 1.35) * opacity}
           distance={1.1}
           decay={2}
         />
         <Html
           center
           distanceFactor={7}
-          style={{ pointerEvents: "none" }}
+          style={{ pointerEvents: "none", opacity }}
           zIndexRange={[100, 0]}
         >
           <div
@@ -642,7 +711,6 @@ function Meteor({
           </div>
         </Html>
       </group>
-      {/* invisible hit target sized for readability */}
       <mesh visible={false} scale={headScale / 0.03}>
         <sphereGeometry args={[0.06, 8, 8]} />
       </mesh>
@@ -655,21 +723,24 @@ function FireballFlash({
   size,
   phase,
   paused,
+  opacity,
 }: {
   pos: THREE.Vector3;
   size: number;
   phase: number;
   paused: boolean;
+  opacity: number;
 }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
-    if (paused || !ref.current) return;
+    if (paused || !ref.current || opacity < 0.04) return;
     const t = (clock.elapsedTime * 0.7 + phase) % 1;
     const pulse = t < 0.25 ? Math.sin((t / 0.25) * Math.PI) : 0;
     ref.current.scale.setScalar(0.001 + pulse * size * 8);
     const mat = ref.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = pulse * 0.55;
+    mat.opacity = pulse * 0.55 * opacity;
   });
+  if (opacity < 0.04) return null;
   return (
     <mesh ref={ref} position={pos}>
       <sphereGeometry args={[1, 10, 10]} />
@@ -688,9 +759,11 @@ function FireballFlash({
 function FireballImpacts({
   fireballs,
   paused,
+  opacity,
 }: {
   fireballs: Fireball[];
   paused: boolean;
+  opacity: number;
 }) {
   const points = useMemo(() => {
     return fireballs
@@ -726,10 +799,49 @@ function FireballImpacts({
           size={p.size}
           phase={p.phase}
           paused={paused}
+          opacity={opacity}
         />
       ))}
     </group>
   );
+}
+
+function LodController({
+  earthPos,
+  controlsRef,
+  onLodChange,
+  blendRef,
+}: {
+  earthPos: THREE.Vector3;
+  controlsRef: MutableRefObject<OrbitControlsImpl | null>;
+  onLodChange?: Props["onLodChange"];
+  blendRef: MutableRefObject<number>;
+}) {
+  const { camera } = useThree();
+  const lastMode = useRef<LodMode | null>(null);
+  const lastReport = useRef(0);
+
+  useFrame(() => {
+    if (controlsRef.current) {
+      controlsRef.current.target.copy(earthPos);
+    }
+    const dist = camera.position.distanceTo(earthPos);
+    const blend = smoothstep(LOD_NEAR, LOD_FAR, dist);
+    blendRef.current = blend;
+    const mode: LodMode =
+      blend < 0.25 ? "earth" : blend > 0.75 ? "solar" : "blend";
+    const now = performance.now();
+    if (
+      onLodChange &&
+      (mode !== lastMode.current || now - lastReport.current > 120)
+    ) {
+      lastMode.current = mode;
+      lastReport.current = now;
+      onLodChange({ blend, distance: dist, mode });
+    }
+  });
+
+  return null;
 }
 
 function SceneContent({
@@ -738,18 +850,20 @@ function SceneContent({
   selectedIds,
   primaryId,
   paused,
-  viewMode,
   progress,
   orbits,
+  onLodChange,
+  blendRef,
 }: {
   risks: RiskEvent[];
   fireballs: Fireball[];
   selectedIds: string[];
   primaryId?: string | null;
   paused: boolean;
-  viewMode: GlobeViewMode;
   progress: number;
   orbits: Record<string, OrbitElements>;
+  onLodChange?: Props["onLodChange"];
+  blendRef: MutableRefObject<number>;
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const tracks = useMemo(() => buildTracks(risks), [risks]);
@@ -758,65 +872,104 @@ function SceneContent({
     [tracks, selectedSet]
   );
 
-  const solar = viewMode === "solar";
+  const earthPos = useMemo(() => earthHeliocentricPosition(), []);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const [blend, setBlend] = useState(0);
+
+  // Mirror blendRef into React state at a low rate for material opacity
+  useFrame(() => {
+    const b = blendRef.current;
+    setBlend((prev) => (Math.abs(prev - b) > 0.02 ? b : prev));
+  });
+
+  const earthFade = 1 - blend;
+  const solarFade = blend;
+  // Show small Earth marker once detailed globe has mostly faded
+  const showSolarEarth = blend > 0.55;
 
   return (
     <>
+      <color attach="background" args={["#020617"]} />
       <Stars
-        radius={solar ? 120 : 80}
-        depth={50}
-        count={solar ? 4200 : 3200}
+        radius={140}
+        depth={60}
+        count={4000}
         factor={3.2}
         saturation={0}
         fade
-        speed={paused ? 0 : 0.4}
+        speed={paused ? 0 : 0.35}
       />
-      {solar ? (
-        <SolarSystemView
-          risks={risks}
-          selectedIds={selectedIds}
-          primaryId={primaryId}
-          progress={progress}
-          orbits={orbits}
+
+      <LodController
+        earthPos={earthPos}
+        controlsRef={controlsRef}
+        onLodChange={onLodChange}
+        blendRef={blendRef}
+      />
+
+      {/* Heliocentric solar LOD — fades in as camera pulls away from Earth */}
+      <SolarSystemView
+        risks={risks}
+        selectedIds={selectedIds}
+        primaryId={primaryId}
+        progress={progress}
+        orbits={orbits}
+        fade={solarFade}
+        showEarthBody={showSolarEarth}
+      />
+
+      {/* Near-Earth LOD — textured globe + atmospheric trails at Earth's heliocentric seat */}
+      <group position={earthPos}>
+        <ambientLight intensity={0.35 * earthFade} />
+        <directionalLight
+          position={[5, 3, 5]}
+          intensity={1.35 * earthFade}
+          color="#fff6e8"
         />
-      ) : (
-        <>
-          <color attach="background" args={["#020617"]} />
-          <ambientLight intensity={0.35} />
-          <directionalLight position={[5, 3, 5]} intensity={1.35} color="#fff6e8" />
-          <directionalLight
-            position={[-4, -2, -3]}
-            intensity={0.25}
-            color="#93c5fd"
-          />
-          <EarthWithFallback autoRotate={!paused} />
-          {visibleTracks.map((t) => (
-            <group key={t.id}>
-              <TrajectoryRibbon
-                track={t}
-                progress={progress}
-                highlighted={t.id === primaryId}
-              />
-              <ImpactMark end={t.end} highlighted={t.id === primaryId} />
-              <Meteor
-                track={t}
-                progress={progress}
-                highlighted={t.id === primaryId}
-              />
-            </group>
-          ))}
-          <FireballImpacts fireballs={fireballs} paused={paused} />
-        </>
-      )}
+        <directionalLight
+          position={[-4, -2, -3]}
+          intensity={0.25 * earthFade}
+          color="#93c5fd"
+        />
+        <EarthWithFallback autoRotate={!paused} opacity={earthFade} />
+        {visibleTracks.map((t) => (
+          <group key={t.id}>
+            <TrajectoryRibbon
+              track={t}
+              progress={progress}
+              highlighted={t.id === primaryId}
+              opacity={earthFade}
+            />
+            <ImpactMark
+              end={t.end}
+              highlighted={t.id === primaryId}
+              opacity={earthFade}
+            />
+            <Meteor
+              track={t}
+              progress={progress}
+              highlighted={t.id === primaryId}
+              opacity={earthFade}
+            />
+          </group>
+        ))}
+        <FireballImpacts
+          fireballs={fireballs}
+          paused={paused}
+          opacity={earthFade}
+        />
+      </group>
+
       <OrbitControls
+        ref={controlsRef}
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
-        minDistance={solar ? 4 : 1.8}
-        maxDistance={solar ? 48 : 6}
+        minDistance={1.85}
+        maxDistance={58}
         autoRotate={false}
         rotateSpeed={0.55}
-        zoomSpeed={0.7}
+        zoomSpeed={0.85}
         touches={{
           ONE: THREE.TOUCH.ROTATE,
           TWO: THREE.TOUCH.DOLLY_PAN,
@@ -832,17 +985,28 @@ export default function EarthGlobe({
   selectedIds,
   primaryId,
   className,
-  viewMode = "earth",
   progress = 0,
   playing = false,
   orbits = {},
   orbitsLoading = false,
+  onLodChange,
 }: Props) {
   const [paused, setPaused] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [lodMode, setLodMode] = useState<LodMode>("earth");
+  const blendRef = useRef(0);
 
   const activeIds = selectedIds ?? [];
-  const solar = viewMode === "solar";
+
+  const earthPos = useMemo(() => earthHeliocentricPosition(), []);
+  const camPos = useMemo(
+    (): [number, number, number] => [
+      earthPos.x,
+      earthPos.y + 0.55,
+      earthPos.z + 3.15,
+    ],
+    [earthPos]
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -851,6 +1015,14 @@ export default function EarthGlobe({
     onVis();
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
+
+  const handleLod = useCallback(
+    (info: { blend: number; distance: number; mode: LodMode }) => {
+      setLodMode(info.mode);
+      onLodChange?.(info);
+    },
+    [onLodChange]
+  );
 
   const onCreated = useCallback(({ gl }: { gl: THREE.WebGLRenderer }) => {
     gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -877,6 +1049,13 @@ export default function EarthGlobe({
     );
   }
 
+  const modeLabel =
+    lodMode === "solar"
+      ? "Solar system"
+      : lodMode === "blend"
+        ? "Zooming…"
+        : "Near Earth";
+
   return (
     <div
       className={`relative overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950 shadow-2xl shadow-cyan-950/30 ${className ?? ""}`}
@@ -884,30 +1063,27 @@ export default function EarthGlobe({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 bg-gradient-to-b from-slate-950/90 to-transparent px-3 py-2 sm:px-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
-            {solar ? "Solar system" : "Live 3D Earth"}
+            {modeLabel}
           </p>
           <p className="text-xs text-slate-400">
-            {solar
-              ? "Keplerian orbits from JPL SBDB · Earth for scale"
-              : "Trajectory ribbons · shooting stars · fireball flashes"}
+            Scroll / pinch to zoom from Earth trails out to heliocentric orbits
           </p>
         </div>
-        <p className="hidden max-w-[40%] text-right text-[10px] text-slate-500 sm:block">
-          Drag to orbit · pinch/scroll to zoom · timeline scrubs path
+        <p className="hidden max-w-[42%] text-right text-[10px] text-slate-500 sm:block">
+          Drag to orbit · continuous zoom · timeline scrubs path
         </p>
       </div>
 
       <div
-        className="h-[min(58vh,520px)] w-full min-h-[300px] touch-none overscroll-none sm:min-h-[360px]"
+        className="h-[55vh] w-full min-h-[280px] touch-none overscroll-none sm:h-[min(70vh,720px)] sm:min-h-[420px]"
         style={{ touchAction: "none" }}
       >
         <Canvas
-          key={viewMode}
           camera={{
-            position: solar ? [0, 6, 14] : [0, 0.6, 3.2],
+            position: camPos,
             fov: 42,
-            near: 0.1,
-            far: 400,
+            near: 0.08,
+            far: 500,
           }}
           dpr={[1, 1.75]}
           onCreated={onCreated}
@@ -925,20 +1101,21 @@ export default function EarthGlobe({
               selectedIds={activeIds}
               primaryId={primaryId}
               paused={paused}
-              viewMode={viewMode}
               progress={progress}
               orbits={orbits}
+              onLodChange={handleLod}
+              blendRef={blendRef}
             />
           </Suspense>
         </Canvas>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 px-3 py-2 text-[11px] text-slate-500">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 px-3 py-1.5 text-[11px] text-slate-500">
         <span>
-          {solar
-            ? `${keplerCount}/${activeIds.length} Keplerian orbit${keplerCount === 1 ? "" : "s"} from SBDB`
-            : `${activeIds.length} ribbon${activeIds.length === 1 ? "" : "s"} · ${fbCount} fireball flashes`}
-          {solar && orbitsLoading ? " · loading SBDB…" : ""}
+          {lodMode === "solar"
+            ? `${keplerCount}/${activeIds.length} Keplerian orbit${keplerCount === 1 ? "" : "s"} · ${AU_SCALE} u/AU`
+            : `${activeIds.length} trail${activeIds.length === 1 ? "" : "s"} · ${fbCount} fireball flashes`}
+          {orbitsLoading ? " · loading SBDB…" : ""}
         </span>
         <span className="text-slate-600">
           {paused ? "Paused (tab hidden)" : playing ? "Playing" : "Scrub or play"}

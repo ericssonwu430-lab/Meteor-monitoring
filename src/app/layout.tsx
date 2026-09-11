@@ -36,8 +36,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <header className="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur pt-[max(0.5rem,env(safe-area-inset-top))]">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+        <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur pt-[max(0.5rem,env(safe-area-inset-top))]">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2.5 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
             <Link href="/" className="flex items-center gap-2">
               <span className="text-lg">☄️</span>
               <span className="font-semibold tracking-tight text-slate-100">
@@ -48,17 +48,16 @@ export default function RootLayout({
               </span>
             </Link>
             <p className="text-[11px] text-slate-500">
-              NASA/JPL Sentry · CAD · Fireball · SBDB
+              Zoom Earth → solar system
             </p>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-6 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+        <main className="mx-auto w-full max-w-7xl px-3 py-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:px-4 sm:py-4">
           {children}
         </main>
-        <footer className="mx-auto max-w-6xl border-t border-slate-800/60 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center text-xs text-slate-500">
+        <footer className="mx-auto max-w-6xl border-t border-slate-800/60 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-[11px] text-slate-500">
           Impact % = Sentry <code className="text-slate-400">ip × 100</code>.
-          Not a prediction of imminent danger — most listed objects have
-          vanishingly small probabilities. Attribution:{" "}
+          Education / monitoring only.{" "}
           <a
             className="text-cyan-400 hover:underline"
             href="https://ssd-api.jpl.nasa.gov/"

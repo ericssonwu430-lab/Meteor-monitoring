@@ -2,17 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
-import type { GlobeViewMode } from "@/components/EarthGlobe";
+import type { CloseApproach, Fireball, OrbitElements, RiskEvent } from "@/types/neo";
+import type { LodMode } from "@/components/EarthGlobe";
 import MeteorPicker from "@/components/MeteorPicker";
 import MeteorDetail from "@/components/MeteorDetail";
 import TrajectoryTimeline from "@/components/TrajectoryTimeline";
 import DataFreshness from "@/components/DataFreshness";
+import ImpactCard from "@/components/ImpactCard";
+import Filters from "@/components/Filters";
+import FireballMap from "@/components/FireballMap";
+import Timeline from "@/components/Timeline";
+import { formatImpactPercent } from "@/lib/format";
 
 const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[min(58vh,520px)] min-h-[300px] flex-1 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 sm:min-h-[360px]">
+    <div className="flex h-[55vh] min-h-[280px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 sm:h-[min(70vh,720px)] sm:min-h-[420px]">
       <p className="text-sm text-slate-500">Loading 3D globe…</p>
     </div>
   ),
@@ -21,33 +26,57 @@ const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
 const DEFAULT_SELECT = 3;
 const LOOP_SECONDS = 8;
 
+type TabId = "meteors" | "details" | "activity" | "about";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "meteors", label: "Meteors" },
+  { id: "details", label: "Details" },
+  { id: "activity", label: "Activity" },
+  { id: "about", label: "About" },
+];
+
 function riskId(r: RiskEvent): string {
   return r.id || r.des;
 }
 
 type Props = {
   risks: RiskEvent[];
+  /** Full filtered list for risk cards (may be larger than globe subset) */
+  listRisks?: RiskEvent[];
+  totalRiskCount?: number;
   fireballs: Fireball[];
+  approaches?: CloseApproach[];
   updatedAt?: Date | null;
+  minIp?: number;
+  onMinIpChange?: (v: number) => void;
+  onRefresh?: () => void;
 };
 
-export default function GlobeSection({ risks, fireballs, updatedAt }: Props) {
+export default function GlobeSection({
+  risks,
+  listRisks,
+  totalRiskCount,
+  fireballs,
+  approaches = [],
+  updatedAt,
+  minIp = 0,
+  onMinIpChange,
+  onRefresh,
+}: Props) {
+  const cardRisks = listRisks ?? risks;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [primaryId, setPrimaryId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
-  const [listOpen, setListOpen] = useState(true);
-  const [viewMode, setViewMode] = useState<GlobeViewMode>("earth");
+  const [tab, setTab] = useState<TabId | null>(null);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [lodMode, setLodMode] = useState<LodMode>("earth");
   const [orbits, setOrbits] = useState<Record<string, OrbitElements>>({});
   const [orbitLoading, setOrbitLoading] = useState<Record<string, boolean>>({});
   const orbitCache = useRef<Record<string, OrbitElements>>({});
   const orbitInflight = useRef<Set<string>>(new Set());
 
-  const idsKey = useMemo(
-    () => risks.map(riskId).join("|"),
-    [risks]
-  );
+  const idsKey = useMemo(() => risks.map(riskId).join("|"), [risks]);
 
   useEffect(() => {
     if (risks.length === 0) {
@@ -105,6 +134,7 @@ export default function GlobeSection({ risks, fireballs, updatedAt }: Props) {
       next.add(id);
       return next;
     });
+    setTab("details");
   }, []);
 
   const onSelectAll = useCallback(() => {
@@ -229,11 +259,6 @@ export default function GlobeSection({ risks, fireballs, updatedAt }: Props) {
     return () => cancelAnimationFrame(raf);
   }, [playing]);
 
-  const onViewMode = useCallback((mode: GlobeViewMode) => {
-    setViewMode(mode);
-    setProgress(0);
-  }, []);
-
   const orbitsLoading = useMemo(() => {
     if (!primaryRisk) {
       return selectedList.some((id) => {
@@ -244,136 +269,223 @@ export default function GlobeSection({ risks, fireballs, updatedAt }: Props) {
     return !!orbitLoading[primaryRisk.des] && !orbits[primaryRisk.des];
   }, [orbitLoading, orbits, primaryRisk, selectedList, risks]);
 
-  const solarKeplerReady =
-    viewMode !== "solar" ||
-    selectedList.some((id) => {
-      const r = risks.find((x) => riskId(x) === id);
-      return r && orbits[r.des]?.available;
-    });
+  const top = cardRisks[0];
+
+  const toggleTab = (id: TabId) => {
+    setTab((prev) => (prev === id ? null : id));
+  };
 
   return (
-    <div className="space-y-3">
-      <DataFreshness updatedAt={updatedAt ?? null} />
+    <div className="flex flex-col gap-0">
+      {/* Hero globe — top center */}
+      <div className="mx-auto w-full max-w-6xl">
+        <EarthGlobe
+          risks={risks}
+          fireballs={fireballs}
+          selectedIds={selectedList}
+          primaryId={primaryId}
+          progress={progress}
+          playing={playing}
+          orbits={orbits}
+          orbitsLoading={orbitsLoading}
+          onLodChange={({ mode }) => setLodMode(mode)}
+        />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div
-          className="inline-flex rounded-xl border border-slate-700 bg-slate-950/80 p-0.5"
-          role="group"
-          aria-label="Globe view mode"
-        >
-          <button
-            type="button"
-            onClick={() => onViewMode("earth")}
-            className={`min-h-11 min-w-[88px] rounded-lg px-3 text-sm font-medium ${
-              viewMode === "earth"
-                ? "bg-cyan-500 text-slate-950"
-                : "text-slate-300 hover:text-cyan-200"
-            }`}
-          >
-            Earth
-          </button>
-          <button
-            type="button"
-            onClick={() => onViewMode("solar")}
-            className={`min-h-11 min-w-[88px] rounded-lg px-3 text-sm font-medium ${
-              viewMode === "solar"
-                ? "bg-cyan-500 text-slate-950"
-                : "text-slate-300 hover:text-cyan-200"
-            }`}
-          >
-            Solar system
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 md:hidden">
-          <p className="text-xs text-slate-400">
-            {selectedIds.size} meteor{selectedIds.size === 1 ? "" : "s"} on view
-          </p>
-          <button
-            type="button"
-            onClick={() => setListOpen((o) => !o)}
-            className="min-h-11 rounded-lg border border-slate-600 px-3 text-sm text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
-          >
-            {listOpen ? "Hide list" : "Show meteor list"}
-          </button>
-        </div>
+        {/* Slim timeline directly under globe */}
+        <TrajectoryTimeline
+          progress={progress}
+          playing={playing}
+          onProgressChange={setProgress}
+          onPlayingChange={setPlaying}
+          lodMode={lodMode}
+          disabled={selectedList.length === 0}
+          compact
+          className="rounded-b-xl border border-t-0 border-slate-700/80"
+        />
       </div>
 
-      {viewMode === "solar" && !orbitsLoading && !solarKeplerReady && (
-        <p className="rounded-lg border border-amber-900/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
-          SBDB Keplerian elements are unavailable for the current selection —
-          Sun and Earth orbit still shown. Origin details use Sentry fields.
-        </p>
-      )}
-
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+      {/* Function tab strip */}
+      <div className="mx-auto mt-3 w-full max-w-6xl">
         <div
-          className={`${
-            listOpen ? "flex" : "hidden"
-          } min-w-0 flex-col gap-3 md:flex lg:w-[300px] lg:shrink-0 xl:w-[320px]`}
+          className="flex gap-1 overflow-x-auto rounded-xl border border-slate-700/80 bg-slate-950/80 p-1"
+          role="tablist"
+          aria-label="Dashboard panels"
         >
-          <MeteorPicker
-            risks={risks}
-            selectedIds={selectedIds}
-            primaryId={primaryId}
-            onToggle={onToggle}
-            onPrimary={onPrimary}
-            onSelectAll={onSelectAll}
-            onClear={onClear}
-            className="h-[220px] sm:h-[260px] lg:h-auto lg:min-h-[240px] lg:flex-1 lg:max-h-[320px]"
-          />
-          <MeteorDetail
-            risk={primaryRisk}
-            orbit={primaryRisk ? orbits[primaryRisk.des] ?? null : null}
-            loading={
-              !!primaryRisk &&
-              !!orbitLoading[primaryRisk.des] &&
-              !orbits[primaryRisk.des]
-            }
-            className="max-h-[280px] lg:max-h-none lg:flex-1"
-          />
+          {TABS.map((t) => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => toggleTab(t.id)}
+                className={`min-h-10 flex-1 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition ${
+                  active
+                    ? "bg-cyan-500 text-slate-950"
+                    : "text-slate-300 hover:bg-slate-900 hover:text-cyan-200"
+                }`}
+              >
+                {t.label}
+                {t.id === "meteors" && selectedIds.size > 0 && (
+                  <span
+                    className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
+                      active ? "bg-slate-950/20" : "bg-slate-800 text-cyan-300"
+                    }`}
+                  >
+                    {selectedIds.size}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <EarthGlobe
-            risks={risks}
-            fireballs={fireballs}
-            selectedIds={selectedList}
-            primaryId={primaryId}
-            viewMode={viewMode}
-            progress={progress}
-            playing={playing}
-            orbits={orbits}
-            orbitsLoading={orbitsLoading}
-          />
-          <div className="hidden md:block">
-            <TrajectoryTimeline
-              progress={progress}
-              playing={playing}
-              onProgressChange={setProgress}
-              onPlayingChange={setPlaying}
-              viewMode={viewMode}
-              disabled={selectedList.length === 0}
-            />
+        {tab && (
+          <div
+            role="tabpanel"
+            className="mt-2 max-h-[min(52vh,560px)] overflow-y-auto overscroll-contain rounded-xl border border-slate-700/80 bg-slate-950/90 p-3 sm:p-4"
+          >
+            {tab === "meteors" && (
+              <div className="space-y-3">
+                {onMinIpChange && (
+                  <Filters minIp={minIp} onMinIpChange={onMinIpChange} />
+                )}
+                <MeteorPicker
+                  risks={risks}
+                  selectedIds={selectedIds}
+                  primaryId={primaryId}
+                  onToggle={onToggle}
+                  onPrimary={onPrimary}
+                  onSelectAll={onSelectAll}
+                  onClear={onClear}
+                  className="h-[min(42vh,420px)]"
+                />
+                {cardRisks.length > 0 && (
+                  <div>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Risk cards ({cardRisks.length}
+                      {totalRiskCount != null && totalRiskCount !== cardRisks.length
+                        ? ` of ${totalRiskCount}`
+                        : ""}
+                      )
+                    </h3>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {cardRisks.slice(0, 30).map((ev, i) => (
+                        <ImpactCard
+                          key={ev.id || ev.des}
+                          event={ev}
+                          rank={i + 1}
+                        />
+                      ))}
+                    </div>
+                    {cardRisks.length > 30 && (
+                      <p className="mt-2 text-center text-xs text-slate-500">
+                        Showing top 30. Raise min IP in filters to focus.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === "details" && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                <MeteorDetail
+                  risk={primaryRisk}
+                  orbit={primaryRisk ? orbits[primaryRisk.des] ?? null : null}
+                  loading={
+                    !!primaryRisk &&
+                    !!orbitLoading[primaryRisk.des] &&
+                    !orbits[primaryRisk.des]
+                  }
+                  className="min-h-[240px]"
+                />
+                {top && (
+                  <div className="space-y-3">
+                    <ImpactCard event={top} rank={1} hero />
+                    <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+                      <p className="text-xs uppercase text-slate-500">
+                        Highest IP (filtered)
+                      </p>
+                      <p className="mt-1 font-mono text-3xl font-bold text-amber-300">
+                        {formatImpactPercent(top.ip)}
+                      </p>
+                      <p className="mt-2 text-sm text-slate-300">
+                        {top.fullname || top.des} · VI years {top.range}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === "activity" && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                <FireballMap fireballs={fireballs} />
+                <Timeline approaches={approaches} fireballs={fireballs} />
+              </div>
+            )}
+
+            {tab === "about" && (
+              <div className="space-y-3 text-sm text-slate-300">
+                <DataFreshness updatedAt={updatedAt ?? null} />
+                <div className="flex flex-wrap items-center gap-2">
+                  {onRefresh && (
+                    <button
+                      type="button"
+                      onClick={onRefresh}
+                      className="min-h-10 rounded-lg border border-slate-600 px-3 text-sm text-slate-200 hover:border-cyan-600 hover:text-cyan-300"
+                    >
+                      Refresh now
+                    </button>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    Auto-refresh every 2 minutes · NASA/JPL Sentry · CAD ·
+                    Fireball · SBDB
+                  </p>
+                </div>
+                <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">
+                  <strong>Disclaimer:</strong> Sentry impact probabilities are
+                  statistical over decades-to-centuries. A high-ranking tiny
+                  asteroid can show a large % while remaining harmless. This MVP
+                  is for monitoring & education — not emergency alerts.
+                </div>
+                <p className="text-xs leading-relaxed text-slate-400">
+                  Zoom the 3D view continuously: close in for atmospheric
+                  meteor trails on Earth; pull out for the Sun, Earth&apos;s
+                  orbit, and selected NEO heliocentric paths from SBDB. Use the
+                  thin timeline under the globe to scrub trajectories.
+                </p>
+              </div>
+            )}
           </div>
-        </div>
+        )}
+
+        {!tab && (
+          <p className="mt-2 text-center text-[11px] text-slate-500">
+            Open a tab for meteors, details, activity, or about ·{" "}
+            {selectedIds.size} on globe
+          </p>
+        )}
       </div>
 
-      {/* Mobile sticky timeline — always reachable, safe-area padded */}
+      {/* Mobile: keep timeline reachable above home indicator when scrolling tabs */}
       <div
         className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-700 bg-slate-950/95 md:hidden"
-        style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: "max(0.35rem, env(safe-area-inset-bottom))" }}
       >
         <TrajectoryTimeline
           progress={progress}
           playing={playing}
           onProgressChange={setProgress}
           onPlayingChange={setPlaying}
-          viewMode={viewMode}
+          lodMode={lodMode}
           disabled={selectedList.length === 0}
+          compact
         />
       </div>
-      <div className="h-24 md:hidden" aria-hidden />
+      <div className="h-20 md:hidden" aria-hidden />
     </div>
   );
 }
