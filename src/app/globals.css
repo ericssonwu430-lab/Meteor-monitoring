@@ -91,3 +91,18 @@ input[type="range"].traj-range::-moz-range-thumb {
   background: #22d3ee;
   box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.28);
 }
+
+
+/* Phone-friendly: one page scroll, hide decorative scrollbars */
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

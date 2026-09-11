@@ -49,7 +49,7 @@ export default function Timeline({ approaches, fireballs }: Props) {
       <div className="border-b border-slate-800 px-4 py-3 text-sm font-medium text-slate-200">
         Events · close approaches (next 60d) &amp; recent fireballs
       </div>
-      <ul className="max-h-[420px] overflow-y-auto divide-y divide-slate-800">
+      <ul className="divide-y divide-slate-800">
         {sorted.length === 0 && (
           <li className="px-4 py-6 text-center text-sm text-slate-500">
             No events

@@ -32,7 +32,7 @@ import {
 const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[55vh] min-h-[280px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 sm:h-[min(70vh,720px)] sm:min-h-[420px]">
+    <div className="flex h-[42vh] min-h-[240px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 sm:h-[min(70vh,720px)] sm:min-h-[420px]">
       <p className="text-sm text-slate-500">Loading 3D globe…</p>
     </div>
   ),
@@ -465,7 +465,7 @@ export default function GlobeSection({
       {/* Function tab strip */}
       <div className="mx-auto mt-3 w-full max-w-6xl">
         <div
-          className="flex gap-1 overflow-x-auto rounded-xl border border-slate-700/80 bg-slate-950/80 p-1"
+          className="no-scrollbar flex gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-700/80 bg-slate-950/80 p-1"
           role="tablist"
           aria-label="Dashboard panels"
         >
@@ -502,7 +502,7 @@ export default function GlobeSection({
         {tab && (
           <div
             role="tabpanel"
-            className="mt-2 max-h-[min(52vh,560px)] overflow-y-auto overscroll-contain rounded-xl border border-slate-700/80 bg-slate-950/90 p-3 sm:p-4"
+            className="mt-2 rounded-xl border border-slate-700/80 bg-slate-950/90 p-3 sm:p-4"
           >
             {tab === "meteors" && (
               <div className="space-y-3">
@@ -524,7 +524,7 @@ export default function GlobeSection({
                   onPrimary={onPrimary}
                   onSelectAll={onSelectAll}
                   onClear={onClear}
-                  className="h-[min(42vh,420px)]"
+                  className="max-h-none"
                 />
                 {cardRisks.length > 0 && (
                   <div>
@@ -570,7 +570,7 @@ export default function GlobeSection({
                     !!orbitLoading[primaryRisk.des] &&
                     !orbits[primaryRisk.des]
                   }
-                  className="min-h-[240px]"
+                  className=""
                 />
                 {top && (
                   <div className="space-y-3">

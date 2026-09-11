@@ -1318,7 +1318,7 @@ export default function EarthGlobe({
       </div>
 
       <div
-        className="h-[55vh] w-full min-h-[280px] touch-none overscroll-none sm:h-[min(70vh,720px)] sm:min-h-[420px]"
+        className="h-[42vh] w-full min-h-[240px] touch-none overscroll-none sm:h-[min(70vh,720px)] sm:min-h-[420px]"
         style={{ touchAction: "none" }}
       >
         <Canvas

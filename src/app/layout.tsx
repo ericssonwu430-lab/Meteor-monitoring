@@ -53,7 +53,7 @@ export default function RootLayout({
             </p>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl px-3 py-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:px-4 sm:py-4">
+        <main className="mx-auto w-full max-w-7xl px-3 py-3 pb-8 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:px-4 sm:py-4 sm:pb-10">
           {children}
         </main>
         <footer className="mx-auto max-w-6xl border-t border-slate-800/60 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-[11px] text-slate-500">

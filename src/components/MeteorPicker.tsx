@@ -43,7 +43,7 @@ export default function MeteorPicker({
 
   return (
     <aside
-      className={`flex min-h-0 flex-col rounded-xl border border-slate-700/80 bg-slate-950/90 shadow-xl shadow-cyan-950/20 ${className ?? ""}`}
+      className={`flex flex-col rounded-xl border border-slate-700/80 bg-slate-950/90 shadow-xl shadow-cyan-950/20 ${className ?? ""}`}
     >
       <div className="shrink-0 border-b border-slate-800 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
@@ -79,7 +79,7 @@ export default function MeteorPicker({
         </p>
       </div>
 
-      <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-1.5 py-2">
+      <ul className="space-y-0.5 px-1.5 py-2">
         {risks.length === 0 && (
           <li className="px-2 py-6 text-center text-xs text-slate-500">
             No Sentry risks to list.

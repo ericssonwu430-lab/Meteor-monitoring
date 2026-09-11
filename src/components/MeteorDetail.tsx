@@ -135,7 +135,7 @@ export default function MeteorDetail({
 
   return (
     <aside
-      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/90 shadow-xl shadow-cyan-950/20 ${className ?? ""}`}
+      className={`flex flex-col rounded-xl border border-slate-700/80 bg-slate-950/90 shadow-xl shadow-cyan-950/20 ${className ?? ""}`}
     >
       <div className="shrink-0 border-b border-slate-800 px-3 py-2.5">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
@@ -149,7 +149,7 @@ export default function MeteorDetail({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 text-xs">
+      <div className="space-y-3 px-3 py-3 text-xs">
         <div className="flex flex-wrap gap-1.5">
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-950/80 px-2 py-0.5 font-mono font-semibold text-amber-300">
             {formatImpactPercent(ip)}
