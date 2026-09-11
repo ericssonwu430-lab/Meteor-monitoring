@@ -48,6 +48,8 @@ export const TIPS = {
     "Scrub or play along the path. Near Earth you see atmospheric approach; zoom out for the heliocentric orbit.",
   fireballs:
     "Bright meteors that already entered Earth’s atmosphere (past events from US sensors) — not the same as future Sentry risks.",
+  fireballSpotted:
+    "Country or ocean region where NASA/US sensors recorded the fireball (from the event’s lat/lon). Over water this is a basin like North Pacific Ocean. This is the meteor’s location — never your GPS or IP.",
   closeApproach:
     "Predicted near-miss distance and time from NASA’s Close Approach database.",
   earthView:

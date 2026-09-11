@@ -125,6 +125,12 @@ export interface Fireball {
   lon: number | null;
   alt: string | null;
   vel: string | null;
+  /** Reverse-geocoded country of the event coords — never visitor location. */
+  country?: string | null;
+  /** Country or ocean/region label where the fireball was spotted. */
+  location?: string | null;
+  /** Same as location (readable spotted place). */
+  spotted?: string | null;
 }
 
 /** JPL SBDB orbit element row */

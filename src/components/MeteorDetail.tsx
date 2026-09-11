@@ -11,6 +11,7 @@ import {
   formatPalermo,
   torinoColor,
 } from "@/lib/format";
+import { formatDisplayDate } from "@/lib/timelineDates";
 
 type Props = {
   risk: RiskEvent | null;
@@ -186,7 +187,7 @@ export default function MeteorDetail({
           </div>
           <div>
             <dt className="text-slate-500">{LABELS.lastObs}</dt>
-            <dd className="font-mono text-slate-200">{risk.last_obs || "—"}</dd>
+            <dd className="font-mono text-slate-200">{formatDisplayDate(risk.last_obs)}</dd>
           </div>
           <div>
             <dt>
@@ -261,7 +262,7 @@ export default function MeteorDetail({
               <div>
                 <dt className="text-slate-500">{LABELS.firstObs}</dt>
                 <dd className="font-mono text-slate-200">
-                  {orbit.firstObs ?? "—"}
+                  {formatDisplayDate(orbit.firstObs)}
                 </dd>
               </div>
               <div>

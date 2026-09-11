@@ -25,9 +25,12 @@ import { formatImpactPercent } from "@/lib/format";
 import { impactLatLonForDes } from "@/lib/meteorTrack";
 import {
   deriveTimelineDates,
-  formatDdMmYy,
+  formatDdMmYyyy,
   interpolateDate,
 } from "@/lib/timelineDates";
+import { useEnrichedFireballs } from "@/lib/useEnrichedFireballs";
+import InfoTip from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
 
 const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
   ssr: false,
@@ -105,6 +108,7 @@ export default function GlobeSection({
   const [showPlanetsLocal, setShowPlanetsLocal] = useState(true);
   const showFireballs = showFireballsProp ?? showFireballsLocal;
   const showPlanets = showPlanetsProp ?? showPlanetsLocal;
+  const locatedFireballs = useEnrichedFireballs(fireballs);
   const setShowFireballs = onShowFireballsChange ?? setShowFireballsLocal;
   const setShowPlanets = onShowPlanetsChange ?? setShowPlanetsLocal;
   void setShowPlanets; // planets toggle lives in the top toolbar
@@ -324,7 +328,7 @@ export default function GlobeSection({
       timelineDates.end,
       progress
     );
-    return d ? formatDdMmYy(d) : undefined;
+    return d ? formatDdMmYyyy(d) : undefined;
   }, [timelineDates, progress]);
 
   useEffect(() => {
@@ -478,7 +482,7 @@ export default function GlobeSection({
       <div className="mx-auto w-full max-w-6xl">
         <EarthGlobe
           risks={globeRenderRisks}
-          fireballs={fireballs}
+          fireballs={locatedFireballs}
           showFireballs={showFireballs}
           showPlanets={showPlanets}
           impactCountry={impactCountry}
@@ -653,11 +657,28 @@ export default function GlobeSection({
             {tab === "activity" && (
               <div className="space-y-3">
                 <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-xs leading-relaxed text-slate-300">
-                  <strong className="text-slate-100">Fireballs</strong> are very
+                  <strong className="inline-flex items-center gap-1.5 text-slate-100">
+                    Fireballs
+                    <InfoTip
+                      text={TIPS.fireballs}
+                      label={`About ${LABELS.fireballs}`}
+                    />
+                  </strong>{" "}
+                  are very
                   bright meteors — space rocks that already entered Earth&apos;s
                   atmosphere and flared. This feed is from NASA/JPL US-sensor
                   detections (time, energy, often lat/lon). They are past events,
-                  not the same as Sentry&apos;s future impact-risk asteroids.
+                  not the same as Sentry&apos;s future impact-risk asteroids.{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <span>
+                      Spotted location is the country or ocean region of each
+                      event — never your device location.
+                    </span>
+                    <InfoTip
+                      text={TIPS.fireballSpotted}
+                      label={`About ${LABELS.fireballSpotted}`}
+                    />
+                  </span>
                 </div>
                 <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-200">
                   <span>Show fireballs on the 3D map</span>
@@ -671,13 +692,13 @@ export default function GlobeSection({
                 </label>
                 <div className="grid gap-3 lg:grid-cols-2">
                   {showFireballs ? (
-                    <FireballMap fireballs={fireballs} />
+                    <FireballMap fireballs={locatedFireballs} />
                   ) : (
                     <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 text-center text-xs text-slate-500">
                       Fireball map hidden — turn the toggle on to view.
                     </div>
                   )}
-                  <Timeline approaches={approaches} fireballs={fireballs} />
+                  <Timeline approaches={approaches} fireballs={locatedFireballs} />
                 </div>
               </div>
             )}

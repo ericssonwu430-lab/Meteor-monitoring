@@ -2,6 +2,10 @@
 
 import type { Fireball } from "@/types/neo";
 import { LABELS } from "@/lib/labels";
+import { TIPS } from "@/lib/glossary";
+import { formatCoords, placeName } from "@/lib/fireballLocation";
+import { formatDisplayDate } from "@/lib/timelineDates";
+import { LabelWithInfo } from "@/components/InfoTip";
 
 type Props = {
   fireballs: Fireball[];
@@ -25,7 +29,13 @@ export default function FireballMap({ fireballs }: Props) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
       <div className="border-b border-slate-800 px-3 py-2 text-xs uppercase tracking-wider text-slate-400">
-        {LABELS.fireballsMap}
+        <LabelWithInfo
+          tip={TIPS.fireballSpotted}
+          tipLabel={`About ${LABELS.fireballSpotted}`}
+          className="text-xs uppercase tracking-wider text-slate-400"
+        >
+          {LABELS.fireballsMap}
+        </LabelWithInfo>
       </div>
       <svg
         viewBox={`0 0 ${w} ${h}`}
@@ -71,14 +81,21 @@ export default function FireballMap({ fireballs }: Props) {
           const { x, y } = project(f.lat!, f.lon!);
           const energy = f.energy ? parseFloat(f.energy) : 1;
           const r = Math.min(10, Math.max(3, Math.log10(energy + 1) * 3 + 2));
+          const place = f.location || f.spotted || placeName(f.lat!, f.lon!, f.country);
+          const coords = formatCoords(f.lat!, f.lon!);
+          const title = [
+            place,
+            formatDisplayDate(f.date),
+            f.energy ? `${f.energy} kt` : null,
+            f.impact_e ? `${f.impact_e} kt impact` : null,
+            coords,
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return (
             <g key={`${f.date}-${i}`}>
               <circle cx={x} cy={y} r={r} fill="#f59e0b" fillOpacity={0.85}>
-                <title>
-                  {f.date}
-                  {f.energy ? ` · ${f.energy} kt` : ""}
-                  {f.impact_e ? ` · ${f.impact_e} kt impact` : ""}
-                </title>
+                <title>{title}</title>
               </circle>
               <circle
                 cx={x}

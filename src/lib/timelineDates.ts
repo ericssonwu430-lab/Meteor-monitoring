@@ -1,18 +1,78 @@
 import type { OrbitElements, RiskEvent, SentryDetailResponse } from "@/types/neo";
 
-/** Format a Date as dd/mm/yy (en-GB / day-first, UTC). */
-export function formatDdMmYy(d: Date): string {
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+/** Format a Date as dd/mm/yyyy (en-GB / day-first, UTC). Optional HH:mm clock. */
+export function formatDdMmYyyy(
+  d: Date,
+  opts?: { time?: boolean }
+): string {
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const yy = String(d.getUTCFullYear()).slice(-2);
-  return `${dd}/${mm}/${yy}`;
+  const yyyy = String(d.getUTCFullYear());
+  const date = `${dd}/${mm}/${yyyy}`;
+  if (!opts?.time) return date;
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${date} ${hh}:${mi}`;
 }
 
-/** Parse Sentry / SBDB date strings like "2880-03-16.99", "1950-02-23", "2026-09-11 17:00:24". */
+/** @deprecated Use formatDdMmYyyy — kept as an alias (now 4-digit year). */
+export function formatDdMmYy(d: Date): string {
+  return formatDdMmYyyy(d);
+}
+
+function hasClockTime(s: string): boolean {
+  return /(?:[T ]\d{2}:\d{2})/.test(s);
+}
+
+/**
+ * Parse NASA/Sentry/CAD/fireball strings to a Date and show dd/mm/yyyy,
+ * keeping HH:mm when the source included a clock time.
+ */
+export function formatDisplayDate(raw: string | null | undefined): string {
+  if (raw == null) return "—";
+  const s = String(raw).trim();
+  if (!s) return "—";
+  const d = parseLooseDate(s);
+  if (!d) return s;
+  return formatDdMmYyyy(d, { time: hasClockTime(s) });
+}
+
+/** Parse Sentry / SBDB / CAD date strings like "2880-03-16.99", "1950-02-23", "2026-09-11 17:00:24", "2026-Sep-11 04:27". */
 export function parseLooseDate(raw: string | null | undefined): Date | null {
   if (!raw) return null;
   const s = raw.trim();
   if (!s) return null;
+
+  const named = s.match(
+    /^(\d{4})-([A-Za-z]{3})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (named) {
+    const mo = MONTH_INDEX[named[2].toLowerCase()];
+    if (mo != null) {
+      const y = parseInt(named[1], 10);
+      const day = parseInt(named[3], 10);
+      const h = named[4] != null ? parseInt(named[4], 10) : 0;
+      const mi = named[5] != null ? parseInt(named[5], 10) : 0;
+      const sec = named[6] != null ? parseInt(named[6], 10) : 0;
+      const d = new Date(Date.UTC(y, mo, day, h, mi, sec));
+      return Number.isFinite(d.getTime()) ? d : null;
+    }
+  }
 
   const withTime = s.match(
     /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/
@@ -124,8 +184,8 @@ export function deriveTimelineDates(
   return {
     start,
     end,
-    labelStart: start ? formatDdMmYy(start) : "—",
-    labelEnd: end ? formatDdMmYy(end) : "—",
+    labelStart: start ? formatDdMmYyyy(start) : "—",
+    labelEnd: end ? formatDdMmYyyy(end) : "—",
   };
 }
 

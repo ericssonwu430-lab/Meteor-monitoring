@@ -13,6 +13,7 @@ import {
   formatPalermo,
   torinoColor,
 } from "@/lib/format";
+import { formatDisplayDate } from "@/lib/timelineDates";
 
 function displayStat(v: unknown): string {
   if (v == null || v === "") return "—";
@@ -144,8 +145,8 @@ export default function ObjectDetailPage() {
                 { label: LABELS.vInf, tip: TIPS.vInf, value: summary.v_inf },
                 { label: LABELS.vImp, tip: TIPS.vImp, value: summary.v_imp },
                 { label: LABELS.mass, tip: TIPS.mass, value: summary.mass },
-                { label: LABELS.firstObs, tip: TIPS.firstObs, value: summary.first_obs },
-                { label: LABELS.lastObs, tip: TIPS.lastObs, value: summary.last_obs },
+                { label: LABELS.firstObs, tip: TIPS.firstObs, value: formatDisplayDate(summary.first_obs) },
+                { label: LABELS.lastObs, tip: TIPS.lastObs, value: formatDisplayDate(summary.last_obs) },
                 { label: LABELS.observations, tip: TIPS.observations, value: summary.nobs },
                 { label: LABELS.method, tip: TIPS.method, value: summary.method },
                 { label: LABELS.dataArc, tip: TIPS.dataArc, value: summary.darc },
@@ -194,7 +195,7 @@ export default function ObjectDetailPage() {
                   {vis.map((vi, i) => (
                     <tr key={`${vi.date}-${i}`} className="bg-slate-950/40">
                       <td className="px-3 py-2 font-mono text-slate-200">
-                        {vi.date}
+                        {formatDisplayDate(vi.date)}
                       </td>
                       <td className="px-3 py-2 font-mono text-amber-300">
                         {formatImpactPercent(vi.ip)}

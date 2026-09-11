@@ -18,7 +18,7 @@ npm run build && npm start
 - **Scrubbable trajectory timeline** (play/pause) shared with Earth and solar views
 - **Continuous zoom** from near-Earth trails to heliocentric SBDB orbits
 - **Play → camera follow + auto-zoom** on the primary meteor (drag overrides; Play resumes)
-- **Timeline dates** in `dd/mm/yy` from Sentry/SBDB + best-effort impact country (not NASA-official)
+- **Timeline dates** in `dd/mm/yyyy` from Sentry/SBDB + best-effort impact country (not NASA-official)
 - **Origin + brief details** (orbit class, elements, observation arc) from SBDB + Sentry
 - Object detail page with virtual-impactor table
 - Close approaches (CAD, next 60 days, ≤ 0.05 AU)
