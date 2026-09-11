@@ -14,8 +14,15 @@ export function seededUnit(seed: number, salt: number): number {
   return x - Math.floor(x);
 }
 
-/** Lat/lon of the animated near-Earth path endpoint (illustrative, not NASA ground track). */
-export function impactLatLonForDes(des: string, indexHint = 0): { lat: number; lon: number } {
+/**
+ * Lat/lon of the animated near-Earth path endpoint.
+ * Illustrative / seeded for visualization only — not an official NASA ground track.
+ * Globe ring, reverse-geocode, and HUD must all call this same helper.
+ */
+export function impactLatLonForDes(
+  des: string,
+  indexHint = 0
+): { lat: number; lon: number } {
   const seed = hashString(des || String(indexHint));
   const lat = seededUnit(seed, 1) * 140 - 70;
   const lon = seededUnit(seed, 2) * 360 - 180;

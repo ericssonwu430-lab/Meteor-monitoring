@@ -24,7 +24,9 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
 import { formatImpactPercent } from "@/lib/format";
-import { hashString, seededUnit } from "@/lib/meteorTrack";
+import { hashString, impactLatLonForDes, seededUnit } from "@/lib/meteorTrack";
+import InfoTip from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
 import SolarSystemView, {
   AU_SCALE,
   earthHeliocentricPosition,
@@ -130,9 +132,10 @@ function displayName(r: RiskEvent): string {
 function buildTracks(risks: RiskEvent[]): MeteorTrack[] {
   return risks.slice(0, MAX_METEORS).map((r, i) => {
     const ip = parseFloat(r.ip) || 0;
-    const seed = hashString(r.des || r.id || String(i));
-    const lat = seededUnit(seed, 1) * 140 - 70;
-    const lon = seededUnit(seed, 2) * 360 - 180;
+    const seedKey = r.des || r.id || "";
+    const seed = hashString(seedKey || String(i));
+    // Same lat/lon as GlobeSection geocode + HUD (shared helper — no divergent seeds)
+    const { lat, lon } = impactLatLonForDes(seedKey, i);
     const end = latLonToVec3(lat, lon, EARTH_RADIUS * 1.01);
     const approachDir = end.clone().normalize();
     const tangent = new THREE.Vector3(
@@ -313,15 +316,33 @@ function ImpactMark({
   );
 }
 
-function useEarthSpin(autoRotate: boolean) {
-  const earthRef = useRef<THREE.Mesh>(null);
+/** Cloud-layer drift only — continent yaw is owned by SceneContent EarthSpinGroup. */
+function useCloudDrift(autoRotate: boolean) {
   const cloudRef = useRef<THREE.Mesh>(null);
   useFrame((_, dt) => {
-    if (!autoRotate) return;
-    if (earthRef.current) earthRef.current.rotation.y += dt * 0.04;
-    if (cloudRef.current) cloudRef.current.rotation.y += dt * 0.055;
+    if (!autoRotate || !cloudRef.current) return;
+    cloudRef.current.rotation.y += dt * 0.015;
   });
-  return { earthRef, cloudRef };
+  return cloudRef;
+}
+
+function EarthSpinGroup({
+  autoRotate,
+  yawRef,
+  children,
+}: {
+  autoRotate: boolean;
+  yawRef: MutableRefObject<number>;
+  children?: ReactNode;
+}) {
+  const spinRef = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (!autoRotate || !spinRef.current) return;
+    const dy = dt * 0.04;
+    spinRef.current.rotation.y += dy;
+    yawRef.current = spinRef.current.rotation.y;
+  });
+  return <group ref={spinRef}>{children}</group>;
 }
 
 function Atmosphere({ opacity = 1 }: { opacity?: number }) {
@@ -345,7 +366,7 @@ function TexturedEarth({
   autoRotate: boolean;
   opacity: number;
 }) {
-  const { earthRef, cloudRef } = useEarthSpin(autoRotate);
+  const cloudRef = useCloudDrift(autoRotate);
   const [map, spec, clouds] = useTexture(
     [EARTH_DIFFUSE, EARTH_SPECULAR, EARTH_CLOUDS],
     (loaded) => {
@@ -358,7 +379,7 @@ function TexturedEarth({
 
   return (
     <group visible={opacity > 0.02}>
-      <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
+      <Sphere args={[EARTH_RADIUS, 64, 64]}>
         <meshPhongMaterial
           map={map}
           specularMap={spec}
@@ -391,10 +412,10 @@ function ProceduralEarth({
   autoRotate: boolean;
   opacity: number;
 }) {
-  const { earthRef, cloudRef } = useEarthSpin(autoRotate);
+  const cloudRef = useCloudDrift(autoRotate);
   return (
     <group visible={opacity > 0.02}>
-      <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
+      <Sphere args={[EARTH_RADIUS, 64, 64]}>
         <meshPhongMaterial
           color="#5ba3d9"
           emissive="#2a5f8f"
@@ -836,6 +857,7 @@ function FollowCamera({
   primaryDes,
   orbits,
   earthPos,
+  earthYawRef,
   controlsRef,
   followActiveRef,
 }: {
@@ -846,6 +868,7 @@ function FollowCamera({
   primaryDes?: string | null;
   orbits: Record<string, OrbitElements>;
   earthPos: THREE.Vector3;
+  earthYawRef: MutableRefObject<number>;
   controlsRef: MutableRefObject<OrbitControlsImpl | null>;
   followActiveRef: MutableRefObject<boolean>;
 }) {
@@ -918,15 +941,18 @@ function FollowCamera({
       followActiveRef.current = true;
       const overviewDist = 3.45;
       // Place camera along impact outward normal so the hit / ring faces the viewer
+      const yaw = earthYawRef.current;
+      const spinAxis = new THREE.Vector3(0, 1, 0);
       const preferred = primaryTrack
         ? primaryTrack.end
             .clone()
+            .applyAxisAngle(spinAxis, yaw)
             .normalize()
             .add(new THREE.Vector3(0, 0.22, 0))
             .normalize()
         : new THREE.Vector3(0.25, 0.45, 1).normalize();
       const impactDir = primaryTrack
-        ? primaryTrack.end.clone().normalize()
+        ? primaryTrack.end.clone().applyAxisAngle(spinAxis, yaw).normalize()
         : preferred;
       desiredTarget.current
         .copy(earthPos)
@@ -972,6 +998,11 @@ function FollowCamera({
       primaryTrack.end,
       t,
       meteorLocal.current
+    );
+    // Match Earth spin group so follow camera tracks the spun meteor / ring
+    meteorLocal.current.applyAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      earthYawRef.current
     );
     meteorWorld.current.copy(meteorLocal.current).add(earthPos);
 
@@ -1103,6 +1134,7 @@ function SceneContent({
   const earthPos = useMemo(() => earthHeliocentricPosition(), []);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const followActiveRef = useRef(false);
+  const earthYawRef = useRef(0);
   const [blend, setBlend] = useState(0);
 
   // Mirror blendRef into React state at a low rate for material opacity
@@ -1121,8 +1153,8 @@ function SceneContent({
   const solarFade = blend;
   // Show small Earth marker once detailed globe has mostly faded
   const showSolarEarth = blend > 0.55;
-  // Hold continents still so the impact ring stays meaningful at time-bar end
-  const impactOverviewHold = !playing && progress >= 0.99;
+  // Hold continents whenever potential-impact country is shown (HUD ≥0.92) or at end
+  const impactOverviewHold = progress >= 0.92;
 
   return (
     <>
@@ -1156,6 +1188,7 @@ function SceneContent({
         }
         orbits={orbits}
         earthPos={earthPos}
+        earthYawRef={earthYawRef}
         controlsRef={controlsRef}
         followActiveRef={followActiveRef}
       />
@@ -1200,40 +1233,45 @@ function SceneContent({
           intensity={0.55 * earthFade}
           color="#fff7ed"
         />
-        <EarthWithFallback
+        <EarthSpinGroup
           autoRotate={!paused && !impactOverviewHold}
-          opacity={earthFade}
-        />
-        {visibleTracks.map((t) => (
-          <group key={t.id}>
-            <TrajectoryRibbon
-              track={t}
-              progress={progress}
-              progressRef={progressRef}
-              highlighted={t.id === primaryId}
-              opacity={earthFade}
-            />
-            <ImpactMark
-              end={t.end}
-              highlighted={t.id === primaryId}
-              opacity={earthFade}
-            />
-            <Meteor
-              track={t}
-              progress={progress}
-              progressRef={progressRef}
-              highlighted={t.id === primaryId}
-              opacity={earthFade}
-            />
-          </group>
-        ))}
-        {showFireballs && (
-          <FireballImpacts
-            fireballs={fireballs}
-            paused={paused}
+          yawRef={earthYawRef}
+        >
+          <EarthWithFallback
+            autoRotate={!paused && !impactOverviewHold}
             opacity={earthFade}
           />
-        )}
+          {visibleTracks.map((t) => (
+            <group key={t.id}>
+              <TrajectoryRibbon
+                track={t}
+                progress={progress}
+                progressRef={progressRef}
+                highlighted={t.id === primaryId}
+                opacity={earthFade}
+              />
+              <ImpactMark
+                end={t.end}
+                highlighted={t.id === primaryId}
+                opacity={earthFade}
+              />
+              <Meteor
+                track={t}
+                progress={progress}
+                progressRef={progressRef}
+                highlighted={t.id === primaryId}
+                opacity={earthFade}
+              />
+            </group>
+          ))}
+          {showFireballs && (
+            <FireballImpacts
+              fireballs={fireballs}
+              paused={paused}
+              opacity={earthFade}
+            />
+          )}
+        </EarthSpinGroup>
       </group>
 
       <OrbitControls
@@ -1390,12 +1428,19 @@ export default function EarthGlobe({
             </div>
           )}
           {showImpactHud && (
-            <div className="rounded-md border border-amber-500/45 bg-slate-950/85 px-1.5 py-0.5 text-right shadow-md shadow-black/40 backdrop-blur-sm">
-              <p className="text-[8px] font-semibold uppercase tracking-wide text-amber-200/85 sm:text-[9px]">
+            <div className="pointer-events-auto rounded-md border border-amber-500/45 bg-slate-950/85 px-1.5 py-0.5 text-right shadow-md shadow-black/40 backdrop-blur-sm">
+              <p className="inline-flex items-center justify-end gap-1 text-[8px] font-semibold uppercase tracking-wide text-amber-200/85 sm:text-[9px]">
                 Potential impact
+                <InfoTip
+                  text={TIPS.potentialImpact}
+                  label="About potential impact location"
+                />
               </p>
               <p className="truncate text-[9px] font-semibold text-amber-100 sm:text-[10px]">
                 {impactHudCountry}
+              </p>
+              <p className="text-[7px] font-normal normal-case tracking-normal text-slate-400 sm:text-[8px]">
+                Illustrative path end — not NASA ground track
               </p>
             </div>
           )}

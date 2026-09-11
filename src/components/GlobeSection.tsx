@@ -23,6 +23,7 @@ import FireballMap from "@/components/FireballMap";
 import Timeline from "@/components/Timeline";
 import { formatImpactPercent } from "@/lib/format";
 import { impactLatLonForDes } from "@/lib/meteorTrack";
+import { placeName } from "@/lib/fireballLocation";
 import {
   deriveTimelineDates,
   formatDdMmYyyy,
@@ -267,16 +268,16 @@ export default function GlobeSection({
     };
   }, [primaryRisk?.des]);
 
-  // Reverse-geocode illustrative path endpoint → potential impact country
+  // Reverse-geocode SAME illustrative path endpoint used by the globe ring / HUD
   useEffect(() => {
-    if (!primaryRisk?.des) {
+    if (!primaryRisk) {
       setImpactCountry(null);
       setImpactCountryReady(false);
       return;
     }
-    const des = primaryRisk.des;
+    const seedKey = primaryRisk.des || primaryRisk.id || "";
     const idx = risks.findIndex((r) => riskId(r) === riskId(primaryRisk));
-    const { lat, lon } = impactLatLonForDes(des, idx >= 0 ? idx : 0);
+    const { lat, lon } = impactLatLonForDes(seedKey, idx >= 0 ? idx : 0);
     const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
     if (key in countryCache.current) {
       setImpactCountry(countryCache.current[key]);
@@ -296,12 +297,19 @@ export default function GlobeSection({
           typeof json.country === "string" && json.country.trim()
             ? json.country.trim()
             : null;
-        countryCache.current[key] = country;
-        setImpactCountry(country);
+        // Prefer API location (includes ocean fallback); else placeName helper
+        const fromApi =
+          typeof json.location === "string" && json.location.trim()
+            ? json.location.trim()
+            : null;
+        const label = fromApi || placeName(lat, lon, country);
+        countryCache.current[key] = label;
+        setImpactCountry(label);
       } catch {
         if (!cancelled) {
-          countryCache.current[key] = null;
-          setImpactCountry(null);
+          const fallback = placeName(lat, lon, null);
+          countryCache.current[key] = fallback;
+          setImpactCountry(fallback);
         }
       } finally {
         if (!cancelled) setImpactCountryReady(true);
