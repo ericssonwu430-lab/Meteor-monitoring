@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { CloseApproach, Fireball, OrbitElements, RiskEvent } from "@/types/neo";
+import type {
+  CloseApproach,
+  Fireball,
+  OrbitElements,
+  RiskEvent,
+  SentryDetailResponse,
+} from "@/types/neo";
 import type { LodMode } from "@/components/EarthGlobe";
 import MeteorPicker from "@/components/MeteorPicker";
 import MeteorDetail from "@/components/MeteorDetail";
@@ -13,6 +19,12 @@ import Filters from "@/components/Filters";
 import FireballMap from "@/components/FireballMap";
 import Timeline from "@/components/Timeline";
 import { formatImpactPercent } from "@/lib/format";
+import { impactLatLonForDes } from "@/lib/meteorTrack";
+import {
+  deriveTimelineDates,
+  formatDdMmYy,
+  interpolateDate,
+} from "@/lib/timelineDates";
 
 const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
   ssr: false,
@@ -75,6 +87,13 @@ export default function GlobeSection({
   const [orbitLoading, setOrbitLoading] = useState<Record<string, boolean>>({});
   const orbitCache = useRef<Record<string, OrbitElements>>({});
   const orbitInflight = useRef<Set<string>>(new Set());
+  const [sentryDetail, setSentryDetail] = useState<SentryDetailResponse | null>(
+    null
+  );
+  const [impactCountry, setImpactCountry] = useState<string | null>(null);
+  const [impactCountryReady, setImpactCountryReady] = useState(false);
+  const countryCache = useRef<Record<string, string | null>>({});
+  const sentryCache = useRef<Record<string, SentryDetailResponse>>({});
 
   const idsKey = useMemo(() => risks.map(riskId).join("|"), [risks]);
 
@@ -165,6 +184,103 @@ export default function GlobeSection({
     }
     return null;
   }, [primaryId, risks]);
+
+  // Fetch Sentry object detail (VI table / first_obs) for timeline dates
+  useEffect(() => {
+    if (!primaryRisk?.des) {
+      setSentryDetail(null);
+      return;
+    }
+    const des = primaryRisk.des;
+    if (sentryCache.current[des]) {
+      setSentryDetail(sentryCache.current[des]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/sentry/${encodeURIComponent(des)}`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok || json.error) {
+          setSentryDetail(null);
+          return;
+        }
+        const detail = json as SentryDetailResponse;
+        sentryCache.current[des] = detail;
+        setSentryDetail(detail);
+      } catch {
+        if (!cancelled) setSentryDetail(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryRisk?.des]);
+
+  // Reverse-geocode illustrative path endpoint → potential impact country
+  useEffect(() => {
+    if (!primaryRisk?.des) {
+      setImpactCountry(null);
+      setImpactCountryReady(false);
+      return;
+    }
+    const des = primaryRisk.des;
+    const idx = risks.findIndex((r) => riskId(r) === riskId(primaryRisk));
+    const { lat, lon } = impactLatLonForDes(des, idx >= 0 ? idx : 0);
+    const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    if (key in countryCache.current) {
+      setImpactCountry(countryCache.current[key]);
+      setImpactCountryReady(true);
+      return;
+    }
+    let cancelled = false;
+    setImpactCountryReady(false);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/geocode?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        const country =
+          typeof json.country === "string" && json.country.trim()
+            ? json.country.trim()
+            : null;
+        countryCache.current[key] = country;
+        setImpactCountry(country);
+      } catch {
+        if (!cancelled) {
+          countryCache.current[key] = null;
+          setImpactCountry(null);
+        }
+      } finally {
+        if (!cancelled) setImpactCountryReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryRisk, risks]);
+
+  const timelineDates = useMemo(
+    () =>
+      deriveTimelineDates(
+        primaryRisk,
+        sentryDetail,
+        primaryRisk ? orbits[primaryRisk.des] : null
+      ),
+    [primaryRisk, sentryDetail, orbits]
+  );
+
+  const labelMid = useMemo(() => {
+    const d = interpolateDate(
+      timelineDates.start,
+      timelineDates.end,
+      progress
+    );
+    return d ? formatDdMmYy(d) : undefined;
+  }, [timelineDates, progress]);
 
   useEffect(() => {
     const dess = Array.from(
@@ -298,6 +414,10 @@ export default function GlobeSection({
           onProgressChange={setProgress}
           onPlayingChange={setPlaying}
           lodMode={lodMode}
+          labelStart={timelineDates.labelStart}
+          labelMid={labelMid}
+          labelEnd={timelineDates.labelEnd}
+          impactCountry={impactCountryReady ? impactCountry : undefined}
           disabled={selectedList.length === 0}
           compact
           className="rounded-b-xl border border-t-0 border-slate-700/80"
@@ -457,6 +577,17 @@ export default function GlobeSection({
                   orbit, and selected NEO heliocentric paths from SBDB. Use the
                   thin timeline under the globe to scrub trajectories.
                 </p>
+                <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+                  <strong className="text-slate-100">Privacy:</strong> This app
+                  has no accounts, no cookies for identity, and no analytics. It
+                  does not collect your name, email, or device location. Your
+                  browser only loads this site and public NASA/JPL sky data via
+                  our server. Optional impact-country lookup sends only asteroid
+                  map coordinates (not yours) to OpenStreetMap Nominatim.
+                  Hosting providers (e.g. Vercel) may still see normal web logs
+                  such as IP addresses — that is outside this app&apos;s
+                  control.
+                </div>
               </div>
             )}
           </div>

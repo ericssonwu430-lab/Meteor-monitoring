@@ -57,3 +57,11 @@ Attribution: **NASA/JPL Solar System Dynamics** APIs. This app is for education/
 ## Disclaimer
 
 Most Sentry objects have tiny cumulative probabilities over decades. A large displayed % often belongs to a very small asteroid.
+
+## Privacy
+
+- No user accounts, identity cookies, or analytics in this app.
+- No collection of names, emails, or browser geolocation.
+- Client calls only this app’s `/api/*` routes; NASA/JPL and reverse-geocode run on the server.
+- Impact-country geocode uses asteroid lat/lon only (never the visitor’s location).
+- Hosting platforms may retain standard access logs (IP, user-agent) per their policies.
