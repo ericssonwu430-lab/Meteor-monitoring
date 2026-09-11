@@ -36,8 +36,8 @@ const TRAIL_SEGMENTS = 28;
 const SPARK_COUNT = 8;
 
 /** Camera distance from Earth: fully near-Earth LOD below NEAR, fully solar above FAR. */
-const LOD_NEAR = 5.5;
-const LOD_FAR = 16;
+const LOD_NEAR = 4.8;
+const LOD_FAR = 22;
 
 const EARTH_DIFFUSE =
   "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg";
@@ -1042,9 +1042,9 @@ function SceneContent({
     <>
       <color attach="background" args={["#020617"]} />
       <Stars
-        radius={140}
-        depth={60}
-        count={4000}
+        radius={420}
+        depth={120}
+        count={5500}
         factor={3.2}
         saturation={0}
         fade
@@ -1133,7 +1133,7 @@ function SceneContent({
         enableDamping
         dampingFactor={0.08}
         minDistance={1.85}
-        maxDistance={58}
+        maxDistance={160}
         autoRotate={false}
         rotateSpeed={0.55}
         zoomSpeed={0.85}
@@ -1236,7 +1236,7 @@ export default function EarthGlobe({
             {modeLabel}
           </p>
           <p className="text-xs text-slate-400">
-            Scroll / pinch to zoom from Earth trails out to heliocentric orbits
+            Scroll / pinch out for planets + heliocentric orbit traces
           </p>
         </div>
         <p className="hidden max-w-[42%] text-right text-[10px] text-slate-500 sm:block">

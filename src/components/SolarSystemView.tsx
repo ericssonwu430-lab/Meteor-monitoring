@@ -5,8 +5,14 @@ import { Html, Line } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { OrbitElements, RiskEvent } from "@/types/neo";
-import { EARTH_ORBIT, keplerPosition, sampleOrbitEllipse } from "@/lib/orbit";
+import {
+  EARTH_ORBIT,
+  PLANET_ORBITS,
+  keplerPosition,
+  sampleOrbitEllipse,
+} from "@/lib/orbit";
 import { formatImpactPercent } from "@/lib/format";
+import { hashString } from "@/lib/meteorTrack";
 
 /** Display units per AU — large enough that a close-up Earth (r≈1) does not collide with the Sun. */
 export const AU_SCALE = 12;
@@ -21,19 +27,58 @@ function displayName(r: RiskEvent): string {
   return r.des || r.id || "Unknown";
 }
 
+type KeplerEl = Pick<OrbitElements, "a" | "e" | "i" | "om" | "w" | "ma">;
+
+/** Educational stand-in orbit when SBDB elements are missing. */
+export function fallbackNeoOrbit(des: string): KeplerEl {
+  const h = hashString(des || "neo");
+  const a = 0.9 + (h % 80) / 100; // ~0.9–1.7 AU
+  const e = 0.12 + (h % 45) / 100; // ~0.12–0.57
+  return {
+    a,
+    e: Math.min(0.85, e),
+    i: (h % 28),
+    om: h % 360,
+    w: (h * 7) % 360,
+    ma: (h * 13) % 360,
+  };
+}
+
+function resolveOrbit(
+  des: string,
+  orbit?: OrbitElements | null
+): { el: KeplerEl; approximate: boolean } {
+  if (orbit?.available && orbit.a != null && orbit.e != null) {
+    return {
+      el: {
+        a: orbit.a,
+        e: orbit.e,
+        i: orbit.i ?? 0,
+        om: orbit.om ?? 0,
+        w: orbit.w ?? 0,
+        ma: orbit.ma ?? 0,
+      },
+      approximate: false,
+    };
+  }
+  return { el: fallbackNeoOrbit(des), approximate: true };
+}
+
 function ScaledOrbitLine({
   el,
   color,
   opacity,
   lineWidth,
+  dashed,
 }: {
-  el: Pick<OrbitElements, "a" | "e" | "i" | "om" | "w" | "ma">;
+  el: KeplerEl;
   color: string;
   opacity: number;
   lineWidth: number;
+  dashed?: boolean;
 }) {
   const points = useMemo(() => {
-    return sampleOrbitEllipse(el, 160).map((p) => p.multiplyScalar(AU_SCALE));
+    return sampleOrbitEllipse(el, 180).map((p) => p.multiplyScalar(AU_SCALE));
   }, [el]);
 
   if (opacity < 0.02) return null;
@@ -46,6 +91,9 @@ function ScaledOrbitLine({
       transparent
       opacity={opacity}
       depthWrite={false}
+      dashed={dashed}
+      dashSize={dashed ? 0.35 : undefined}
+      gapSize={dashed ? 0.25 : undefined}
     />
   );
 }
@@ -59,8 +107,9 @@ function KeplerBody({
   ipLabel,
   highlighted,
   opacity = 1,
+  showLabel = true,
 }: {
-  el: Pick<OrbitElements, "a" | "e" | "i" | "om" | "w" | "ma">;
+  el: KeplerEl;
   progress: number;
   color: string;
   size: number;
@@ -68,6 +117,7 @@ function KeplerBody({
   ipLabel?: string;
   highlighted?: boolean;
   opacity?: number;
+  showLabel?: boolean;
 }) {
   const ref = useRef<THREE.Group>(null);
   const pos = useMemo(() => new THREE.Vector3(), []);
@@ -102,10 +152,10 @@ function KeplerBody({
           toneMapped={false}
         />
       </mesh>
-      {opacity > 0.35 && (
+      {showLabel && opacity > 0.35 && (
         <Html
           center
-          distanceFactor={14}
+          distanceFactor={16}
           style={{ pointerEvents: "none" }}
           zIndexRange={[80, 0]}
         >
@@ -128,6 +178,45 @@ function KeplerBody({
         </Html>
       )}
     </group>
+  );
+}
+
+/** Bright arc from perihelion progress 0 → current for selected meteors. */
+function TraceArc({
+  el,
+  progress,
+  color,
+  opacity,
+  lineWidth,
+}: {
+  el: KeplerEl;
+  progress: number;
+  color: string;
+  opacity: number;
+  lineWidth: number;
+}) {
+  const points = useMemo(() => {
+    const t = Math.min(1, Math.max(0.02, progress));
+    const segs = Math.max(8, Math.ceil(t * 96));
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= segs; i++) {
+      const p = keplerPosition(el, (i / segs) * t, new THREE.Vector3());
+      pts.push(p.multiplyScalar(AU_SCALE));
+    }
+    return pts;
+  }, [el, progress]);
+
+  if (opacity < 0.02 || points.length < 2) return null;
+
+  return (
+    <Line
+      points={points}
+      color={color}
+      lineWidth={lineWidth}
+      transparent
+      opacity={opacity}
+      depthWrite={false}
+    />
   );
 }
 
@@ -161,20 +250,24 @@ export default function SolarSystemView({
   const opacity = Math.min(1, Math.max(0, fade));
   if (opacity < 0.02) return null;
 
+  // Planet labels only once fairly zoomed out (avoid clutter during blend)
+  const planetLabelOpacity = opacity > 0.55 ? opacity : 0;
+
   return (
     <group>
-      <ambientLight intensity={0.18 * opacity} />
+      <ambientLight intensity={0.22 * opacity} />
       <pointLight
         position={[0, 0, 0]}
-        intensity={3.2 * opacity}
+        intensity={4.2 * opacity}
         color="#fff7ed"
-        distance={120}
-        decay={2}
+        distance={400}
+        decay={1.6}
       />
+
       {/* Sun */}
       <group>
         <mesh>
-          <sphereGeometry args={[0.42, 32, 32]} />
+          <sphereGeometry args={[0.55, 32, 32]} />
           <meshBasicMaterial
             color="#fbbf24"
             toneMapped={false}
@@ -183,20 +276,20 @@ export default function SolarSystemView({
           />
         </mesh>
         <mesh>
-          <sphereGeometry args={[0.72, 24, 24]} />
+          <sphereGeometry args={[0.95, 24, 24]} />
           <meshBasicMaterial
             color="#f59e0b"
             transparent
-            opacity={0.22 * opacity}
+            opacity={0.28 * opacity}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
           />
         </mesh>
         {opacity > 0.4 && (
-          <Html center distanceFactor={20} style={{ pointerEvents: "none" }}>
+          <Html center distanceFactor={24} style={{ pointerEvents: "none" }}>
             <div
-              className="translate-y-7 whitespace-nowrap font-mono text-[10px] text-amber-200/90"
+              className="translate-y-8 whitespace-nowrap font-mono text-[11px] font-semibold text-amber-200/95"
               style={{ opacity }}
             >
               Sun
@@ -205,42 +298,83 @@ export default function SolarSystemView({
         )}
       </group>
 
-      <ScaledOrbitLine
-        el={EARTH_ORBIT}
-        color="#38bdf8"
-        opacity={0.5 * opacity}
-        lineWidth={1.6}
-      />
-      {showEarthBody && (
-        <KeplerBody
-          el={EARTH_ORBIT}
-          progress={0}
-          color="#38bdf8"
-          size={0.14}
-          label="Earth"
-          opacity={opacity}
-        />
-      )}
+      {/* Major planets + orbit rings */}
+      {PLANET_ORBITS.map((p) => {
+        const el: KeplerEl = {
+          a: p.a,
+          e: p.e,
+          i: p.i,
+          om: p.om,
+          w: p.w,
+          ma: p.ma,
+        };
+        const isEarth = p.id === "earth";
+        if (isEarth && !showEarthBody) {
+          // Still draw Earth's orbit path for orientation
+          return (
+            <ScaledOrbitLine
+              key={p.id}
+              el={el}
+              color={p.color}
+              opacity={0.55 * opacity}
+              lineWidth={1.8}
+            />
+          );
+        }
+        return (
+          <group key={p.id}>
+            <ScaledOrbitLine
+              el={el}
+              color={p.color}
+              opacity={(isEarth ? 0.55 : 0.32) * opacity}
+              lineWidth={isEarth ? 1.8 : 1.15}
+            />
+            <KeplerBody
+              el={el}
+              progress={0}
+              color={p.color}
+              size={p.size}
+              label={p.name}
+              opacity={opacity}
+              showLabel={planetLabelOpacity > 0.35}
+            />
+          </group>
+        );
+      })}
 
+      {/* Selected NEO heliocentric orbits + moving bodies */}
       {selectedRisks.map((r) => {
-        const orbit = orbits[r.des];
-        if (!orbit?.available || orbit.a == null || orbit.e == null) return null;
         const id = riskId(r);
+        const { el, approximate } = resolveOrbit(r.des, orbits[r.des]);
         const highlighted = id === primaryId;
+        const orbitColor = highlighted ? "#fb923c" : "#94a3b8";
+        const bodyColor = highlighted ? "#fdba74" : "#e2e8f0";
         return (
           <group key={id}>
             <ScaledOrbitLine
-              el={orbit}
-              color={highlighted ? "#fb923c" : "#94a3b8"}
-              opacity={(highlighted ? 0.9 : 0.45) * opacity}
-              lineWidth={highlighted ? 2.4 : 1.2}
+              el={el}
+              color={orbitColor}
+              opacity={(highlighted ? 0.95 : 0.55) * opacity}
+              lineWidth={highlighted ? 3.2 : 1.8}
+              dashed={approximate}
+            />
+            <TraceArc
+              el={el}
+              progress={progress}
+              color={highlighted ? "#fbbf24" : "#cbd5e1"}
+              opacity={(highlighted ? 1 : 0.7) * opacity}
+              lineWidth={highlighted ? 4.2 : 2.4}
             />
             <KeplerBody
-              el={orbit}
+              el={el}
               progress={progress}
-              color={highlighted ? "#fdba74" : "#e2e8f0"}
-              size={highlighted ? 0.1 : 0.06}
-              label={displayName(r)}
+              color={bodyColor}
+              size={highlighted ? 0.12 : 0.07}
+              label={
+                approximate
+                  ? `${displayName(r)} (approx.)`
+                  : displayName(r)
+              }
               ipLabel={formatImpactPercent(r.ip)}
               highlighted={highlighted}
               opacity={opacity}
@@ -253,7 +387,9 @@ export default function SolarSystemView({
 }
 
 /** Earth heliocentric position in scene units (progress 0). */
-export function earthHeliocentricPosition(out = new THREE.Vector3()): THREE.Vector3 {
+export function earthHeliocentricPosition(
+  out = new THREE.Vector3()
+): THREE.Vector3 {
   keplerPosition(EARTH_ORBIT, 0, out);
   return out.multiplyScalar(AU_SCALE);
 }

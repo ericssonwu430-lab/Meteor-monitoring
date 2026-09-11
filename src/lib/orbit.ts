@@ -86,3 +86,29 @@ export const EARTH_ORBIT: Pick<
   w: 102.9,
   ma: 0,
 };
+
+/** Approximate mean Keplerian elements for major planets (educational). */
+export type PlanetDef = {
+  id: string;
+  name: string;
+  color: string;
+  /** Visual body radius in scene units (not physical scale) */
+  size: number;
+  a: number;
+  e: number;
+  i: number;
+  om: number;
+  w: number;
+  ma: number;
+};
+
+export const PLANET_ORBITS: PlanetDef[] = [
+  { id: "mercury", name: "Mercury", color: "#a8a29e", size: 0.06, a: 0.387, e: 0.206, i: 7.0, om: 48.3, w: 29.1, ma: 174.8 },
+  { id: "venus", name: "Venus", color: "#fbbf24", size: 0.09, a: 0.723, e: 0.007, i: 3.4, om: 76.7, w: 54.9, ma: 50.4 },
+  { id: "earth", name: "Earth", color: "#38bdf8", size: 0.1, a: 1.0, e: 0.0167, i: 0.0, om: 0.0, w: 102.9, ma: 0.0 },
+  { id: "mars", name: "Mars", color: "#f87171", size: 0.075, a: 1.524, e: 0.093, i: 1.9, om: 49.6, w: 286.5, ma: 19.4 },
+  { id: "jupiter", name: "Jupiter", color: "#fdba74", size: 0.22, a: 5.203, e: 0.048, i: 1.3, om: 100.5, w: 273.9, ma: 20.0 },
+  { id: "saturn", name: "Saturn", color: "#fde68a", size: 0.18, a: 9.537, e: 0.054, i: 2.5, om: 113.7, w: 339.4, ma: 317.0 },
+  { id: "uranus", name: "Uranus", color: "#67e8f9", size: 0.14, a: 19.191, e: 0.047, i: 0.8, om: 74.0, w: 96.5, ma: 142.2 },
+  { id: "neptune", name: "Neptune", color: "#60a5fa", size: 0.13, a: 30.07, e: 0.009, i: 1.8, om: 131.8, w: 273.2, ma: 256.2 },
+];
