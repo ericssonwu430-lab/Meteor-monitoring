@@ -73,7 +73,13 @@ export default function TrajectoryTimeline({
           <button
             type="button"
             disabled={disabled}
-            onClick={() => onPlayingChange(!playing)}
+            onClick={() => {
+              if (!playing && progress >= 0.99) {
+                // Already at end of time bar — restart from the start
+                onProgressChange(0);
+              }
+              onPlayingChange(!playing);
+            }}
             className="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg border border-slate-600 px-2.5 text-sm font-medium text-slate-200 hover:border-cyan-600 hover:text-cyan-300 disabled:cursor-not-allowed"
             aria-label={playing ? "Pause" : "Play"}
           >

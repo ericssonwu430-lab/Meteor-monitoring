@@ -417,8 +417,16 @@ export default function GlobeSection({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!document.hidden) {
-        progressRef.current =
-          (progressRef.current + (dt * playbackSpeed) / LOOP_SECONDS) % 1;
+        const next =
+          progressRef.current + (dt * playbackSpeed) / LOOP_SECONDS;
+        if (next >= 1) {
+          // End of time bar: clamp, stop (no loop). EarthGlobe zooms out.
+          progressRef.current = 1;
+          setProgress(1);
+          setPlaying(false);
+          return;
+        }
+        progressRef.current = next;
         // Throttle React UI updates (~15fps) so the 3D canvas stays smooth
         if (now - lastUi > 66) {
           lastUi = now;
@@ -493,8 +501,8 @@ export default function GlobeSection({
             setProgress(t);
           }}
           onPlayingChange={(p) => {
-            if (p) {
-              // Restart the full story: solar-system start → Earth end
+            if (p && progressRef.current >= 0.99) {
+              // Play from the end: restart the full story from the start
               progressRef.current = 0;
               setProgress(0);
             }

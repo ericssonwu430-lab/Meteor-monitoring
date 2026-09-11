@@ -879,19 +879,34 @@ function FollowCamera({
   const desiredCam = useRef(new THREE.Vector3());
   const viewOffset = useRef(new THREE.Vector3(0.55, 0.85, 1));
 
-  // Resume follow when Play is pressed again — always restart from a wide solar view
+  const zoomOutActive = useRef(false);
+
+  // Resume follow when Play starts; when Play ends at the time-bar end, zoom out on Earth
   useEffect(() => {
     if (playing && !wasPlaying.current) {
       userOverride.current = false;
+      zoomOutActive.current = false;
+    }
+    if (!playing && wasPlaying.current) {
+      const raw =
+        progressRef && typeof progressRef.current === "number"
+          ? progressRef.current
+          : progress;
+      if (raw >= 0.99) {
+        // Leave meteor-follow tight zoom → clear Earth overview
+        zoomOutActive.current = true;
+        userOverride.current = false;
+      }
     }
     wasPlaying.current = playing;
-  }, [playing]);
+  }, [playing, progress, progressRef]);
 
   useEffect(() => {
     let cancelled = false;
     let controls: OrbitControlsImpl | null = null;
     const onStart = () => {
       userOverride.current = true;
+      zoomOutActive.current = false;
     };
     const tryAttach = () => {
       if (cancelled) return;
@@ -911,12 +926,38 @@ function FollowCamera({
   }, [controlsRef]);
 
   useFrame((_, dt) => {
+    const controls = controlsRef.current;
+
+    // After playback hits the end: ease camera out to a clear Earth overview
+    if (zoomOutActive.current && !playing && controls) {
+      if (userOverride.current) {
+        zoomOutActive.current = false;
+        followActiveRef.current = false;
+        return;
+      }
+      followActiveRef.current = true;
+      const overviewDist = 3.45;
+      const preferred = new THREE.Vector3(0.25, 0.45, 1).normalize();
+      desiredTarget.current.copy(earthPos);
+      desiredCam.current
+        .copy(earthPos)
+        .addScaledVector(preferred, overviewDist);
+      const alpha = 1 - Math.exp(-2.4 * dt);
+      controls.target.lerp(desiredTarget.current, alpha);
+      camera.position.lerp(desiredCam.current, alpha);
+      controls.update();
+      if (camera.position.distanceTo(desiredCam.current) < 0.04) {
+        zoomOutActive.current = false;
+        followActiveRef.current = false;
+      }
+      return;
+    }
+
     const following =
       playing && !userOverride.current && primaryTrack != null;
     followActiveRef.current = following;
     if (!following || !primaryTrack) return;
 
-    const controls = controlsRef.current;
     if (!controls) return;
 
     const raw =
