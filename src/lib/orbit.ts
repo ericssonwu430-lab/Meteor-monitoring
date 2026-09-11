@@ -112,3 +112,25 @@ export const PLANET_ORBITS: PlanetDef[] = [
   { id: "uranus", name: "Uranus", color: "#67e8f9", size: 0.14, a: 19.191, e: 0.047, i: 0.8, om: 74.0, w: 96.5, ma: 142.2 },
   { id: "neptune", name: "Neptune", color: "#60a5fa", size: 0.13, a: 30.07, e: 0.009, i: 1.8, om: 131.8, w: 273.2, ma: 256.2 },
 ];
+
+
+/**
+ * Compact educational scale so Mercury→Neptune fit in one frame.
+ * Inner planets stay near-true; outer planets are log-compressed.
+ */
+export function compactSolarAu(aAu: number): number {
+  const a = Math.max(0.05, aAu);
+  if (a <= 1.6) return a; // Mercury–Mars roughly true
+  if (a <= 5.5) return 1.6 + (a - 1.6) * 0.55; // toward Jupiter
+  if (a <= 10) return 3.75 + (a - 5.5) * 0.35; // Saturn
+  if (a <= 20) return 5.3 + (a - 10) * 0.22; // Uranus
+  return 7.5 + (a - 20) * 0.12; // Neptune
+}
+
+/** Remap Kepler elements onto the compact solar display scale (semi-major only). */
+export function compactOrbitElements<T extends { a: number | null | undefined }>(
+  el: T
+): T {
+  const a = el.a ?? 1;
+  return { ...el, a: compactSolarAu(a) };
+}

@@ -8,6 +8,7 @@ import type { OrbitElements, RiskEvent } from "@/types/neo";
 import {
   EARTH_ORBIT,
   PLANET_ORBITS,
+  compactOrbitElements,
   keplerPosition,
   sampleOrbitEllipse,
 } from "@/lib/orbit";
@@ -44,7 +45,7 @@ export function fallbackNeoOrbit(des: string): KeplerEl {
   };
 }
 
-function resolveOrbit(
+export function resolveOrbit(
   des: string,
   orbit?: OrbitElements | null
 ): { el: KeplerEl; approximate: boolean } {
@@ -230,6 +231,8 @@ type Props = {
   fade?: number;
   /** When false, Earth marker is omitted (detailed Earth LOD handles it) */
   showEarthBody?: boolean;
+  /** Keep solar system readable even if camera LOD fade is mid-blend (e.g. during Play) */
+  forceVisible?: boolean;
 };
 
 export default function SolarSystemView({
@@ -240,6 +243,7 @@ export default function SolarSystemView({
   orbits,
   fade = 1,
   showEarthBody = true,
+  forceVisible = false,
 }: Props) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedRisks = useMemo(
@@ -247,11 +251,11 @@ export default function SolarSystemView({
     [risks, selectedSet]
   );
 
-  const opacity = Math.min(1, Math.max(0, fade));
+  const opacity = Math.min(
+    1,
+    Math.max(0, forceVisible ? Math.max(fade, 0.9) : fade)
+  );
   if (opacity < 0.02) return null;
-
-  // Planet labels only once fairly zoomed out (avoid clutter during blend)
-  const planetLabelOpacity = opacity > 0.55 ? opacity : 0;
 
   return (
     <group>
@@ -300,24 +304,32 @@ export default function SolarSystemView({
 
       {/* Major planets + orbit rings */}
       {PLANET_ORBITS.map((p) => {
-        const el: KeplerEl = {
+        const el: KeplerEl = compactOrbitElements({
           a: p.a,
           e: p.e,
           i: p.i,
           om: p.om,
           w: p.w,
           ma: p.ma,
-        };
+        });
         const isEarth = p.id === "earth";
+        // Slightly oversized markers so all 8 planets read clearly
+        const sizeBoost =
+          p.id === "jupiter"
+            ? 0.32
+            : p.id === "saturn"
+              ? 0.28
+              : p.id === "uranus" || p.id === "neptune"
+                ? 0.2
+                : Math.max(0.11, p.size * 1.35);
         if (isEarth && !showEarthBody) {
-          // Still draw Earth's orbit path for orientation
           return (
             <ScaledOrbitLine
               key={p.id}
               el={el}
               color={p.color}
-              opacity={0.55 * opacity}
-              lineWidth={1.8}
+              opacity={0.7 * opacity}
+              lineWidth={2.2}
             />
           );
         }
@@ -326,17 +338,17 @@ export default function SolarSystemView({
             <ScaledOrbitLine
               el={el}
               color={p.color}
-              opacity={(isEarth ? 0.55 : 0.32) * opacity}
-              lineWidth={isEarth ? 1.8 : 1.15}
+              opacity={(isEarth ? 0.7 : 0.5) * opacity}
+              lineWidth={isEarth ? 2.2 : 1.6}
             />
             <KeplerBody
               el={el}
               progress={0}
               color={p.color}
-              size={p.size}
+              size={sizeBoost}
               label={p.name}
               opacity={opacity}
-              showLabel={planetLabelOpacity > 0.35}
+              showLabel={opacity > 0.25}
             />
           </group>
         );
@@ -345,7 +357,9 @@ export default function SolarSystemView({
       {/* Selected NEO heliocentric orbits + moving bodies */}
       {selectedRisks.map((r) => {
         const id = riskId(r);
-        const { el, approximate } = resolveOrbit(r.des, orbits[r.des]);
+        const resolved = resolveOrbit(r.des, orbits[r.des]);
+        const el = compactOrbitElements(resolved.el);
+        const approximate = resolved.approximate;
         const highlighted = id === primaryId;
         const orbitColor = highlighted ? "#fb923c" : "#94a3b8";
         const bodyColor = highlighted ? "#fdba74" : "#e2e8f0";
@@ -354,22 +368,22 @@ export default function SolarSystemView({
             <ScaledOrbitLine
               el={el}
               color={orbitColor}
-              opacity={(highlighted ? 0.95 : 0.55) * opacity}
-              lineWidth={highlighted ? 3.2 : 1.8}
+              opacity={(highlighted ? 1 : 0.65) * Math.max(opacity, 0.35)}
+              lineWidth={highlighted ? 4.5 : 2.4}
               dashed={approximate}
             />
             <TraceArc
               el={el}
-              progress={progress}
+              progress={Math.max(progress, 0.02)}
               color={highlighted ? "#fbbf24" : "#cbd5e1"}
-              opacity={(highlighted ? 1 : 0.7) * opacity}
-              lineWidth={highlighted ? 4.2 : 2.4}
+              opacity={(highlighted ? 1 : 0.75) * Math.max(opacity, 0.35)}
+              lineWidth={highlighted ? 5.5 : 3}
             />
             <KeplerBody
               el={el}
               progress={progress}
               color={bodyColor}
-              size={highlighted ? 0.12 : 0.07}
+              size={highlighted ? 0.18 : 0.1}
               label={
                 approximate
                   ? `${displayName(r)} (approx.)`
@@ -390,6 +404,6 @@ export default function SolarSystemView({
 export function earthHeliocentricPosition(
   out = new THREE.Vector3()
 ): THREE.Vector3 {
-  keplerPosition(EARTH_ORBIT, 0, out);
+  keplerPosition(compactOrbitElements(EARTH_ORBIT), 0, out);
   return out.multiplyScalar(AU_SCALE);
 }

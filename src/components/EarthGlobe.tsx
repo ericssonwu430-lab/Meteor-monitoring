@@ -26,8 +26,11 @@ import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
 import { formatImpactPercent } from "@/lib/format";
 import { hashString, seededUnit } from "@/lib/meteorTrack";
 import SolarSystemView, {
+  AU_SCALE,
   earthHeliocentricPosition,
+  resolveOrbit,
 } from "@/components/SolarSystemView";
+import { compactOrbitElements, keplerPosition } from "@/lib/orbit";
 
 const EARTH_RADIUS = 1;
 const MAX_METEORS = 22;
@@ -36,8 +39,8 @@ const TRAIL_SEGMENTS = 28;
 const SPARK_COUNT = 8;
 
 /** Camera distance from Earth: fully near-Earth LOD below NEAR, fully solar above FAR. */
-const LOD_NEAR = 4.8;
-const LOD_FAR = 22;
+const LOD_NEAR = 4.2;
+const LOD_FAR = 18;
 
 const EARTH_DIFFUSE =
   "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg";
@@ -374,11 +377,11 @@ function TexturedEarth({
         <meshPhongMaterial
           map={map}
           specularMap={spec}
-          specular={new THREE.Color("#88aabb")}
-          shininess={10}
+          specular={new THREE.Color("#cfe8f5")}
+          shininess={6}
           emissive={new THREE.Color("#ffffff")}
           emissiveMap={map}
-          emissiveIntensity={0.28}
+          emissiveIntensity={0.55}
           transparent={opacity < 0.98}
           opacity={opacity}
         />
@@ -387,11 +390,11 @@ function TexturedEarth({
         <meshPhongMaterial
           map={clouds}
           transparent
-          opacity={0.2 * opacity}
+          opacity={0.12 * opacity}
           depthWrite={false}
         />
       </Sphere>
-      <Atmosphere opacity={opacity * 0.85} />
+      <Atmosphere opacity={opacity * 0.55} />
     </group>
   );
 }
@@ -408,28 +411,28 @@ function ProceduralEarth({
     <group visible={opacity > 0.02}>
       <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
         <meshPhongMaterial
-          color="#3b82c4"
-          emissive="#1e3a5f"
-          emissiveIntensity={0.45}
-          specular="#9ec5d8"
-          shininess={14}
+          color="#5ba3d9"
+          emissive="#2a5f8f"
+          emissiveIntensity={0.75}
+          specular="#d7eef8"
+          shininess={8}
           transparent={opacity < 0.98}
           opacity={opacity}
         />
       </Sphere>
       <Sphere args={[EARTH_RADIUS * 1.002, 48, 48]}>
         <meshBasicMaterial
-          color="#3d9a5c"
+          color="#4caf6e"
           transparent
-          opacity={0.42 * opacity}
+          opacity={0.55 * opacity}
           depthWrite={false}
         />
       </Sphere>
       <Sphere ref={cloudRef} args={[EARTH_RADIUS * 1.015, 48, 48]}>
         <meshPhongMaterial
-          color="#f1f5f9"
+          color="#f8fafc"
           transparent
-          opacity={0.08 * opacity}
+          opacity={0.05 * opacity}
           depthWrite={false}
         />
       </Sphere>
@@ -837,6 +840,8 @@ function FollowCamera({
   playing,
   progress,
   primaryTrack,
+  primaryDes,
+  orbits,
   earthPos,
   controlsRef,
   followActiveRef,
@@ -844,6 +849,8 @@ function FollowCamera({
   playing: boolean;
   progress: number;
   primaryTrack: MeteorTrack | null;
+  primaryDes?: string | null;
+  orbits: Record<string, OrbitElements>;
   earthPos: THREE.Vector3;
   controlsRef: MutableRefObject<OrbitControlsImpl | null>;
   followActiveRef: MutableRefObject<boolean>;
@@ -853,11 +860,12 @@ function FollowCamera({
   const wasPlaying = useRef(false);
   const meteorLocal = useRef(new THREE.Vector3());
   const meteorWorld = useRef(new THREE.Vector3());
+  const solarPos = useRef(new THREE.Vector3());
   const desiredTarget = useRef(new THREE.Vector3());
   const desiredCam = useRef(new THREE.Vector3());
-  const viewOffset = useRef(new THREE.Vector3(0.35, 0.55, 1));
+  const viewOffset = useRef(new THREE.Vector3(0.55, 0.85, 1));
 
-  // Resume follow when Play is pressed again
+  // Resume follow when Play is pressed again — always restart from a wide solar view
   useEffect(() => {
     if (playing && !wasPlaying.current) {
       userOverride.current = false;
@@ -871,7 +879,6 @@ function FollowCamera({
     const onStart = () => {
       userOverride.current = true;
     };
-    // OrbitControls ref may not be ready on first paint
     const tryAttach = () => {
       if (cancelled) return;
       controls = controlsRef.current;
@@ -899,6 +906,15 @@ function FollowCamera({
     if (!controls) return;
 
     const t = Math.min(1, Math.max(0, progress));
+
+    // Heliocentric position along the (compact) orbit ellipse
+    const des = primaryDes || primaryTrack.des || primaryTrack.id;
+    const { el } = resolveOrbit(des, orbits[des]);
+    const cel = compactOrbitElements(el);
+    keplerPosition(cel, t, solarPos.current);
+    solarPos.current.multiplyScalar(AU_SCALE);
+
+    // Near-Earth atmospheric approach (end of the story)
     bezierPoint(
       primaryTrack.start,
       primaryTrack.mid,
@@ -908,31 +924,33 @@ function FollowCamera({
     );
     meteorWorld.current.copy(meteorLocal.current).add(earthPos);
 
-    // Path span → pull back when approach starts farther out
-    const pathSpan = primaryTrack.start.length();
-    const farDist = Math.min(9.5, Math.max(3.4, pathSpan * 1.45));
-    const nearDist = 2.05;
-    // Closer near Earth entry (high progress)
-    const zoomT = smoothstep(0.05, 0.92, t);
-    const camDist = THREE.MathUtils.lerp(farDist, nearDist, zoomT);
+    // 0 → ~0.72: follow the solar-system path; then blend into Earth impact
+    const toEarth = smoothstep(0.72, 0.98, t);
+    desiredTarget.current.lerpVectors(
+      solarPos.current,
+      meteorWorld.current,
+      toEarth
+    );
 
-    desiredTarget.current.copy(meteorWorld.current);
+    // Auto-zoom: wide solar frame at the start → tight Earth at the end
+    const a = cel.a ?? 1;
+    const e = cel.e ?? 0;
+    const orbitSpan = a * AU_SCALE * (1 + e);
+    const solarFar = Math.min(110, Math.max(36, orbitSpan * 2.1));
+    const earthNear = 2.15;
+    const zoomT = smoothstep(0.02, 0.97, t);
+    const camDist = THREE.MathUtils.lerp(solarFar, earthNear, zoomT);
 
-    // Keep a stable viewing offset; gently blend with current orbit direction
-    const fromTarget = camera.position.clone().sub(controls.target);
-    if (fromTarget.lengthSq() > 1e-6) {
-      viewOffset.current.lerp(fromTarget.normalize(), 0.08);
-      if (viewOffset.current.lengthSq() < 1e-6) {
-        viewOffset.current.set(0.35, 0.55, 1).normalize();
-      } else {
-        viewOffset.current.normalize();
-      }
-    }
+    // Elevated ecliptic viewpoint so the full ellipse + planets read clearly
+    const preferred = new THREE.Vector3(0.45, 0.95, 0.55).normalize();
+    viewOffset.current.lerp(preferred, 0.12);
+    viewOffset.current.normalize();
+
     desiredCam.current
       .copy(desiredTarget.current)
       .addScaledVector(viewOffset.current, camDist);
 
-    const alpha = 1 - Math.exp(-4.2 * dt);
+    const alpha = 1 - Math.exp(-3.4 * dt);
     controls.target.lerp(desiredTarget.current, alpha);
     camera.position.lerp(desiredCam.current, alpha);
     controls.update();
@@ -1066,12 +1084,19 @@ function SceneContent({
         playing={playing && !paused}
         progress={progress}
         primaryTrack={primaryTrack}
+        primaryDes={
+          risks.find((r) => (r.id || r.des) === primaryId)?.des ??
+          primaryTrack?.des ??
+          null
+        }
+        orbits={orbits}
         earthPos={earthPos}
         controlsRef={controlsRef}
         followActiveRef={followActiveRef}
       />
 
-      {/* Heliocentric solar LOD — fades in as camera pulls away from Earth */}
+      {/* Heliocentric solar LOD — fades in as camera pulls away from Earth.
+          During Play, keep planets + orbit traces fully visible until late zoom-in. */}
       <SolarSystemView
         risks={risks}
         selectedIds={selectedIds}
@@ -1080,28 +1105,34 @@ function SceneContent({
         orbits={orbits}
         fade={solarFade}
         showEarthBody={showSolarEarth}
+        forceVisible={playing && !paused && progress < 0.9}
       />
 
       {/* Near-Earth LOD — textured globe + atmospheric trails at Earth's heliocentric seat */}
       <group position={earthPos}>
-        <ambientLight intensity={0.72 * earthFade} />
+        <ambientLight intensity={1.05 * earthFade} />
         <hemisphereLight
-          args={["#e8f4ff", "#1a2a1a", 0.55 * earthFade]}
+          args={["#ffffff", "#3d5a3d", 0.85 * earthFade]}
         />
         <directionalLight
           position={[5, 3, 5]}
-          intensity={2.25 * earthFade}
-          color="#fffaf0"
+          intensity={3.2 * earthFade}
+          color="#ffffff"
         />
         <directionalLight
           position={[-4, -1, -3]}
-          intensity={0.7 * earthFade}
-          color="#b8d4ff"
+          intensity={1.15 * earthFade}
+          color="#dbeafe"
         />
         <directionalLight
           position={[0, 6, -2]}
-          intensity={0.45 * earthFade}
+          intensity={0.9 * earthFade}
           color="#ffffff"
+        />
+        <directionalLight
+          position={[2, -4, 4]}
+          intensity={0.55 * earthFade}
+          color="#fff7ed"
         />
         <EarthWithFallback autoRotate={!paused} opacity={earthFade} />
         {visibleTracks.map((t) => (
@@ -1117,7 +1148,9 @@ function SceneContent({
               highlighted={t.id === primaryId}
               opacity={earthFade}
               countryLabel={
-                t.id === primaryId && impactCountryReady
+                t.id === primaryId &&
+                impactCountryReady &&
+                progress >= 0.92
                   ? impactCountry ?? null
                   : undefined
               }
@@ -1145,7 +1178,7 @@ function SceneContent({
         enableDamping
         dampingFactor={0.08}
         minDistance={1.85}
-        maxDistance={160}
+        maxDistance={140}
         autoRotate={false}
         rotateSpeed={0.55}
         zoomSpeed={0.85}

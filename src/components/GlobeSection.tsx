@@ -425,7 +425,13 @@ export default function GlobeSection({
           progress={progress}
           playing={playing}
           onProgressChange={setProgress}
-          onPlayingChange={setPlaying}
+          onPlayingChange={(p) => {
+            if (p) {
+              // Restart the full story: solar-system start → Earth end
+              setProgress(0);
+            }
+            setPlaying(p);
+          }}
           lodMode={lodMode}
           labelStart={timelineDates.labelStart}
           labelMid={labelMid}
