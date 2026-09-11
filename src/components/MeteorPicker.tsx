@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RiskEvent } from "@/types/neo";
 import InfoTip from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
@@ -50,6 +50,8 @@ export default function MeteorPicker({
   className,
 }: Props) {
   const [query, setQuery] = useState("");
+  /** Years currently expanded; empty = all collapsed */
+  const [openYears, setOpenYears] = useState<Set<string>>(() => new Set());
   const selectedCount = selectedIds.size;
 
   const filtered = useMemo(() => {
@@ -87,6 +89,21 @@ export default function MeteorPicker({
 
   const visibleIds = useMemo(() => filtered.map(riskId), [filtered]);
 
+  // While searching, open every year that has a match so results are visible
+  useEffect(() => {
+    if (!query.trim()) return;
+    setOpenYears(new Set(groups.map((g) => g.year)));
+  }, [query, groups]);
+
+  const toggleYear = (year: string) => {
+    setOpenYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  };
+
   return (
     <aside
       className={`flex flex-col rounded-xl border border-slate-700/80 bg-slate-950/90 shadow-xl shadow-cyan-950/20 ${className ?? ""}`}
@@ -99,7 +116,7 @@ export default function MeteorPicker({
             </p>
             <p className="text-xs text-slate-400">
               {selectedCount} selected · {filtered.length} shown
-              {query.trim() ? ` (of ${risks.length})` : ""} · by year
+              {query.trim() ? ` (of ${risks.length})` : ""} · tap a year to open
             </p>
           </div>
           <div className="flex gap-1.5">
@@ -145,15 +162,33 @@ export default function MeteorPicker({
               : "No Sentry risks to list."}
           </p>
         )}
-        {groups.map(({ year, items }) => (
+        {groups.map(({ year, items }) => {
+          const open = openYears.has(year);
+          const selectedInYear = items.reduce(
+            (n, r) => n + (selectedIds.has(riskId(r)) ? 1 : 0),
+            0
+          );
+          return (
           <section key={year} className="space-y-0.5">
-            <h3 className="sticky top-0 z-[1] flex items-center justify-between gap-2 rounded-md bg-slate-950/95 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-300/90 backdrop-blur">
-              <span>{year}</span>
-              <span className="font-mono text-[10px] font-normal text-slate-500">
-                {items.length}
+            <button
+              type="button"
+              onClick={() => toggleYear(year)}
+              aria-expanded={open}
+              className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-slate-700/80 bg-slate-900/80 px-2.5 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-cyan-300/90 hover:border-cyan-600/60 hover:bg-slate-900"
+            >
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <span className="font-mono text-sm text-slate-400" aria-hidden>
+                  {open ? "▾" : "▸"}
+                </span>
+                <span className="truncate">{year}</span>
               </span>
-            </h3>
-            <ul className="space-y-0.5">
+              <span className="shrink-0 font-mono text-[10px] font-normal normal-case tracking-normal text-slate-500">
+                {items.length}
+                {selectedInYear > 0 ? ` · ${selectedInYear} on` : ""}
+              </span>
+            </button>
+            {open && (
+            <ul className="space-y-0.5 pl-1">
               {items.map((r) => {
                 const id = riskId(r);
                 const checked = selectedIds.has(id);
@@ -224,8 +259,10 @@ export default function MeteorPicker({
                 );
               })}
             </ul>
+            )}
           </section>
-        ))}
+          );
+        })}
       </div>
     </aside>
   );
