@@ -11,7 +11,6 @@ import type {
 } from "@/types/neo";
 import type { LodMode } from "@/components/EarthGlobe";
 import MeteorPicker from "@/components/MeteorPicker";
-import MapViewControls from "@/components/MapViewControls";
 import MeteorDetail from "@/components/MeteorDetail";
 import TrajectoryTimeline, {
   type PlaybackSpeed,
@@ -69,6 +68,10 @@ type Props = {
   /** Object ids that should show [NEW] after a refresh */
   newIds?: Set<string>;
   newBadgeHours?: number;
+  showPlanets?: boolean;
+  showFireballs?: boolean;
+  onShowPlanetsChange?: (v: boolean) => void;
+  onShowFireballsChange?: (v: boolean) => void;
 };
 
 export default function GlobeSection({
@@ -83,6 +86,10 @@ export default function GlobeSection({
   onRefresh,
   newIds,
   newBadgeHours = 24,
+  showPlanets: showPlanetsProp,
+  showFireballs: showFireballsProp,
+  onShowPlanetsChange,
+  onShowFireballsChange,
 }: Props) {
   const cardRisks = listRisks ?? risks;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -94,8 +101,13 @@ export default function GlobeSection({
   const [playing, setPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   const [lodMode, setLodMode] = useState<LodMode>("earth");
-  const [showFireballs, setShowFireballs] = useState(true);
-  const [showPlanets, setShowPlanets] = useState(true);
+  const [showFireballsLocal, setShowFireballsLocal] = useState(true);
+  const [showPlanetsLocal, setShowPlanetsLocal] = useState(true);
+  const showFireballs = showFireballsProp ?? showFireballsLocal;
+  const showPlanets = showPlanetsProp ?? showPlanetsLocal;
+  const setShowFireballs = onShowFireballsChange ?? setShowFireballsLocal;
+  const setShowPlanets = onShowPlanetsChange ?? setShowPlanetsLocal;
+  void setShowPlanets; // planets toggle lives in the top toolbar
   const [orbits, setOrbits] = useState<Record<string, OrbitElements>>({});
   const [orbitLoading, setOrbitLoading] = useState<Record<string, boolean>>({});
   const orbitCache = useRef<Record<string, OrbitElements>>({});
@@ -472,16 +484,6 @@ export default function GlobeSection({
           orbitsLoading={orbitsLoading}
           onLodChange={({ mode }) => setLodMode(mode)}
         />
-
-        <div className="mt-2 flex justify-center px-1 sm:justify-start">
-          <MapViewControls
-            showPlanets={showPlanets}
-            showFireballs={showFireballs}
-            onShowPlanetsChange={setShowPlanets}
-            onShowFireballsChange={setShowFireballs}
-          />
-        </div>
-
         {/* Slim timeline directly under globe */}
         <TrajectoryTimeline
           progress={progress}

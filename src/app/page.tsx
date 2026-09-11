@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import GlobeSection from "@/components/GlobeSection";
+import MapViewControls from "@/components/MapViewControls";
 import { LABELS } from "@/lib/labels";
 import type { CloseApproach, Fireball, RiskEvent } from "@/types/neo";
 import {
@@ -22,6 +23,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [newIds, setNewIds] = useState<Set<string>>(() => new Set());
+  const [showPlanets, setShowPlanets] = useState(true);
+  const [showFireballs, setShowFireballs] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -120,16 +123,24 @@ export default function DashboardPage() {
             </>
           )}
         </p>
-        <button
-          type="button"
-          onClick={() => {
-            if (risks.length === 0) setLoading(true);
-            load();
-          }}
-          className="min-h-9 rounded-lg border border-slate-700 px-2.5 text-xs text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
-        >
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <MapViewControls
+            showPlanets={showPlanets}
+            showFireballs={showFireballs}
+            onShowPlanetsChange={setShowPlanets}
+            onShowFireballsChange={setShowFireballs}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (risks.length === 0) setLoading(true);
+              load();
+            }}
+            className="min-h-9 rounded-lg border border-slate-700 px-2.5 text-xs text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {loading && risks.length === 0 && (
@@ -157,6 +168,10 @@ export default function DashboardPage() {
           onRefresh={load}
           newIds={newIds}
           newBadgeHours={newHours}
+          showPlanets={showPlanets}
+          showFireballs={showFireballs}
+          onShowPlanetsChange={setShowPlanets}
+          onShowFireballsChange={setShowFireballs}
         />
       )}
     </div>
