@@ -4,11 +4,16 @@ import type { LodMode } from "@/components/EarthGlobe";
 import { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
 
+export const PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2.5] as const;
+export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
+
 type Props = {
   progress: number;
   playing: boolean;
   onProgressChange: (t: number) => void;
   onPlayingChange: (playing: boolean) => void;
+  playbackSpeed?: PlaybackSpeed;
+  onPlaybackSpeedChange?: (speed: PlaybackSpeed) => void;
   lodMode?: LodMode;
   labelStart?: string;
   labelMid?: string;
@@ -18,11 +23,18 @@ type Props = {
   compact?: boolean;
 };
 
+function formatSpeed(s: number): string {
+  if (s === 1) return "1×";
+  return `${s}×`;
+}
+
 export default function TrajectoryTimeline({
   progress,
   playing,
   onProgressChange,
   onPlayingChange,
+  playbackSpeed = 1,
+  onPlaybackSpeedChange,
   lodMode = "earth",
   labelStart,
   labelMid,
@@ -95,6 +107,37 @@ export default function TrajectoryTimeline({
           </div>
         </div>
       </div>
+
+      {onPlaybackSpeedChange && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <LabelWithInfo
+            tip="How fast the time bar plays. Lower is slower; higher is faster."
+            className="mr-1 text-[10px] uppercase tracking-wide text-slate-500"
+          >
+            Speed
+          </LabelWithInfo>
+          {PLAYBACK_SPEEDS.map((s) => {
+            const active = playbackSpeed === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={disabled}
+                onClick={() => onPlaybackSpeedChange(s)}
+                className={`min-h-8 rounded-md px-2 font-mono text-[11px] tabular-nums transition ${
+                  active
+                    ? "bg-cyan-500 text-slate-950"
+                    : "border border-slate-700 text-slate-300 hover:border-cyan-600 hover:text-cyan-200"
+                } disabled:cursor-not-allowed`}
+                aria-label={`Playback speed ${formatSpeed(s)}`}
+                aria-pressed={active}
+              >
+                {formatSpeed(s)}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

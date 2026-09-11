@@ -12,7 +12,9 @@ import type {
 import type { LodMode } from "@/components/EarthGlobe";
 import MeteorPicker from "@/components/MeteorPicker";
 import MeteorDetail from "@/components/MeteorDetail";
-import TrajectoryTimeline from "@/components/TrajectoryTimeline";
+import TrajectoryTimeline, {
+  type PlaybackSpeed,
+} from "@/components/TrajectoryTimeline";
 import DataFreshness from "@/components/DataFreshness";
 import ImpactCard from "@/components/ImpactCard";
 import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
@@ -90,6 +92,7 @@ export default function GlobeSection({
   const [tab, setTab] = useState<TabId | null>(null);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   const [lodMode, setLodMode] = useState<LodMode>("earth");
   const [showFireballs, setShowFireballs] = useState(true);
   const [orbits, setOrbits] = useState<Record<string, OrbitElements>>({});
@@ -377,13 +380,13 @@ export default function GlobeSection({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!document.hidden) {
-        setProgress((p) => (p + dt / LOOP_SECONDS) % 1);
+        setProgress((p) => (p + (dt * playbackSpeed) / LOOP_SECONDS) % 1);
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  }, [playing, playbackSpeed]);
 
   const orbitsLoading = useMemo(() => {
     if (!primaryRisk) {
@@ -432,6 +435,8 @@ export default function GlobeSection({
             }
             setPlaying(p);
           }}
+          playbackSpeed={playbackSpeed}
+          onPlaybackSpeedChange={setPlaybackSpeed}
           lodMode={lodMode}
           labelStart={timelineDates.labelStart}
           labelMid={labelMid}
