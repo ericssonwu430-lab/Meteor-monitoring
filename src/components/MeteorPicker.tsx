@@ -160,7 +160,7 @@ export default function MeteorPicker({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, year, or impact country…"
+            placeholder="Search name, year, or impact country (English)…"
             className="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
             autoComplete="off"
             enterKeyHint="search"

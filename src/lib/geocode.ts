@@ -1,6 +1,7 @@
 /**
  * Reverse-geocode asteroid/fireball event coordinates only — never visitor IP/GPS.
  * Shared memory cache + Nominatim throttle for /api/geocode and /api/fireballs.
+ * Country labels are requested in English so MeteorPicker search stays consistent.
  */
 import { oceanRegion } from "@/lib/fireballLocation";
 
@@ -15,8 +16,9 @@ let lastNominatimAt = 0;
 let nominatimChain: Promise<void> = Promise.resolve();
 const inflightLookups = new Map<string, Promise<string | null>>();
 
+/** Prefixed so pre-English cache entries are not reused after deploy. */
 export function geocodeCacheKey(lat: number, lon: number): string {
-  return `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  return `en:${lat.toFixed(2)},${lon.toFixed(2)}`;
 }
 
 /** Cached country or `undefined` on miss. `null` means known "no country" (ocean). */
@@ -31,6 +33,15 @@ function remember(lat: number, lon: number, country: string | null) {
   memoryCache.set(geocodeCacheKey(lat, lon), { country, at: Date.now() });
 }
 
+/** Last comma-separated segment of display_name — often the country at low zoom. */
+function countryFromDisplayName(displayName?: string): string | null {
+  const raw = (displayName || "").trim();
+  if (!raw) return null;
+  const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+  const last = parts[parts.length - 1];
+  return last || null;
+}
+
 async function reverseGeocodeNominatim(
   lat: number,
   lon: number
@@ -42,9 +53,12 @@ async function reverseGeocodeNominatim(
     url.searchParams.set("lon", String(lon));
     url.searchParams.set("zoom", "3");
     url.searchParams.set("addressdetails", "1");
+    // Force English country labels for impact-country search.
+    url.searchParams.set("accept-language", "en");
     const res = await fetch(url.toString(), {
       headers: {
         Accept: "application/json",
+        "Accept-Language": "en",
         "User-Agent": "MeteorMonitoringEducational/1.0 (public NEO dashboard)",
       },
       next: { revalidate: 86400 },
@@ -52,9 +66,11 @@ async function reverseGeocodeNominatim(
     if (res.ok) {
       const json = (await res.json()) as {
         address?: { country?: string };
+        display_name?: string;
       };
-      const name = (json.address?.country || "").trim();
-      if (name) return name;
+      const fromAddress = (json.address?.country || "").trim();
+      if (fromAddress) return fromAddress;
+      return countryFromDisplayName(json.display_name);
     }
   } catch {
     /* ignore */
