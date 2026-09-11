@@ -17,8 +17,6 @@ import TrajectoryTimeline, {
 } from "@/components/TrajectoryTimeline";
 import DataFreshness from "@/components/DataFreshness";
 import ImpactCard from "@/components/ImpactCard";
-import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
-import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 import Filters from "@/components/Filters";
 import FireballMap from "@/components/FireballMap";
@@ -91,6 +89,7 @@ export default function GlobeSection({
   const [initialized, setInitialized] = useState(false);
   const [tab, setTab] = useState<TabId | null>(null);
   const [progress, setProgress] = useState(0);
+  const progressRef = useRef(0);
   const [playing, setPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   const [lodMode, setLodMode] = useState<LodMode>("earth");
@@ -373,14 +372,25 @@ export default function GlobeSection({
   }, [selectedList.join("|"), idsKey]);
 
   useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+
+  useEffect(() => {
     if (!playing) return;
     let raf = 0;
     let last = performance.now();
+    let lastUi = 0;
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!document.hidden) {
-        setProgress((p) => (p + (dt * playbackSpeed) / LOOP_SECONDS) % 1);
+        progressRef.current =
+          (progressRef.current + (dt * playbackSpeed) / LOOP_SECONDS) % 1;
+        // Throttle React UI updates (~15fps) so the 3D canvas stays smooth
+        if (now - lastUi > 66) {
+          lastUi = now;
+          setProgress(progressRef.current);
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -417,6 +427,7 @@ export default function GlobeSection({
           selectedIds={selectedList}
           primaryId={primaryId}
           progress={progress}
+          progressRef={progressRef}
           playing={playing}
           orbits={orbits}
           orbitsLoading={orbitsLoading}
@@ -427,10 +438,14 @@ export default function GlobeSection({
         <TrajectoryTimeline
           progress={progress}
           playing={playing}
-          onProgressChange={setProgress}
+          onProgressChange={(t) => {
+            progressRef.current = t;
+            setProgress(t);
+          }}
           onPlayingChange={(p) => {
             if (p) {
               // Restart the full story: solar-system start → Earth end
+              progressRef.current = 0;
               setProgress(0);
             }
             setPlaying(p);
@@ -443,7 +458,7 @@ export default function GlobeSection({
           labelEnd={timelineDates.labelEnd}
           disabled={selectedList.length === 0}
           compact
-          className="rounded-b-xl border border-t-0 border-slate-700/80"
+          className="overflow-visible rounded-b-xl"
         />
       </div>
 
@@ -469,21 +484,7 @@ export default function GlobeSection({
                     : "text-slate-300 hover:bg-slate-900 hover:text-cyan-200"
                 }`}
               >
-                <span className="inline-flex items-center justify-center gap-1">
-                  {t.label}
-                  <InfoTip
-                    text={
-                      t.id === "meteors"
-                        ? TIPS.meteorsList
-                        : t.id === "details"
-                          ? TIPS.focusedMeteor
-                          : t.id === "activity"
-                            ? TIPS.eventsFeed
-                            : "What this app shows, data sources, and privacy notes."
-                    }
-                    label={`About ${t.label}`}
-                  />
-                </span>
+                {t.label}
                 {t.id === "meteors" && selectedIds.size > 0 && (
                   <span
                     className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
@@ -528,9 +529,9 @@ export default function GlobeSection({
                 {cardRisks.length > 0 && (
                   <div>
                     <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      <LabelWithInfo tip={TIPS.riskCards} className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                         Risk cards
-                      </LabelWithInfo>
+                      </span>
                       <span>
                         ({cardRisks.length}
                         {totalRiskCount != null && totalRiskCount !== cardRisks.length
@@ -600,9 +601,7 @@ export default function GlobeSection({
                   not the same as Sentry&apos;s future impact-risk asteroids.
                 </div>
                 <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-200">
-                  <LabelWithInfo tip={TIPS.fireballs} className="text-sm text-slate-200">
-                    Show fireballs on the 3D map
-                  </LabelWithInfo>
+                  <span>Show fireballs on the 3D map</span>
                   <input
                     type="checkbox"
                     className="h-5 w-5 accent-cyan-500"

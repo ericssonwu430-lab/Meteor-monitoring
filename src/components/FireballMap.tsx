@@ -1,8 +1,6 @@
 "use client";
 
 import type { Fireball } from "@/types/neo";
-import { LabelWithInfo } from "@/components/InfoTip";
-import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 
 type Props = {
@@ -27,9 +25,7 @@ export default function FireballMap({ fireballs }: Props) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
       <div className="border-b border-slate-800 px-3 py-2 text-xs uppercase tracking-wider text-slate-400">
-        <LabelWithInfo tip={TIPS.fireballs} className="text-xs uppercase tracking-wider text-slate-400">
-          {LABELS.fireballsMap}
-        </LabelWithInfo>
+        {LABELS.fireballsMap}
       </div>
       <svg
         viewBox={`0 0 ${w} ${h}`}

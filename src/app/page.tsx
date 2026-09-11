@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import GlobeSection from "@/components/GlobeSection";
-import { LabelWithInfo } from "@/components/InfoTip";
-import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 import type { CloseApproach, Fireball, RiskEvent } from "@/types/neo";
 import {
@@ -105,17 +103,12 @@ export default function DashboardPage() {
       {/* Slim toolbar chip under app header */}
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-300">
-          <LabelWithInfo
-            tip={TIPS.neoMonitor}
-            className="font-semibold text-slate-100"
-          >
+          <span className="font-semibold text-slate-100">
             {LABELS.neoMonitor}
-          </LabelWithInfo>
+          </span>
           <span className="mx-2 text-slate-600">·</span>
-          <span className="inline-flex items-center gap-1 text-xs text-slate-400">
-            <LabelWithInfo tip={TIPS.dataAsOf} className="text-xs text-slate-400">
-              Data as of
-            </LabelWithInfo>{" "}
+          <span className="text-xs text-slate-400">
+            Data as of{" "}
             <span className="font-medium text-cyan-300">{asOf}</span>
           </span>
           {newIds.size > 0 && (

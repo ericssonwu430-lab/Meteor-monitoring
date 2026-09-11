@@ -138,15 +138,11 @@ export default function MeteorDetail({
       className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/90 shadow-xl shadow-cyan-950/20 ${className ?? ""}`}
     >
       <div className="shrink-0 border-b border-slate-800 px-3 py-2.5">
-        <LabelWithInfo
-          tip={TIPS.focusedMeteor}
-          className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90"
-        >
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
           Focused meteor
-        </LabelWithInfo>
-        <h3 className="mt-0.5 flex items-center gap-1.5 truncate text-sm font-semibold text-slate-100">
-          <span className="truncate">{displayName(risk)}</span>
-          <InfoTip text={TIPS.designation} label="About this name" />
+        </p>
+        <h3 className="mt-0.5 truncate text-sm font-semibold text-slate-100">
+          {displayName(risk)}
         </h3>
         {displayName(risk) !== risk.des && (
           <p className="font-mono text-[10px] text-slate-500">{risk.des}</p>
@@ -189,11 +185,7 @@ export default function MeteorDetail({
             <dd className="font-mono text-slate-200">{risk.range || "—"}</dd>
           </div>
           <div>
-            <dt>
-              <LabelWithInfo tip={TIPS.lastObs} className="text-slate-500">
-                {LABELS.lastObs}
-              </LabelWithInfo>
-            </dt>
+            <dt className="text-slate-500">{LABELS.lastObs}</dt>
             <dd className="font-mono text-slate-200">{risk.last_obs || "—"}</dd>
           </div>
           <div>
@@ -267,13 +259,13 @@ export default function MeteorDetail({
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip={TIPS.lastObs} className="text-slate-500">{LABELS.firstObs}</LabelWithInfo></dt>
+                <dt className="text-slate-500">{LABELS.firstObs}</dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.firstObs ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip="How many days of observations span the orbit fit — longer arcs are usually more reliable." className="text-slate-500">{LABELS.dataArc}</LabelWithInfo></dt>
+                <dt className="text-slate-500">{LABELS.dataArc}</dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.dataArc ?? "—"}
                 </dd>

@@ -63,6 +63,8 @@ type Props = {
   primaryId?: string | null;
   className?: string;
   progress?: number;
+  /** Live progress for smooth 3D (avoids React re-render every frame) */
+  progressRef?: MutableRefObject<number>;
   playing?: boolean;
   orbits?: Record<string, OrbitElements>;
   orbitsLoading?: boolean;
@@ -99,6 +101,8 @@ class TextureErrorBoundary extends Component<
     return this.props.children;
   }
 }
+
+
 
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -214,31 +218,34 @@ function sampleBezier(
 function TrajectoryRibbon({
   track,
   progress,
+  progressRef,
   highlighted,
   opacity,
 }: {
   track: MeteorTrack;
   progress: number;
+  progressRef?: MutableRefObject<number>;
   highlighted: boolean;
   opacity: number;
 }) {
   const fullPts = useMemo(
-    () => sampleBezier(track.start, track.mid, track.end, 56),
+    () => sampleBezier(track.start, track.mid, track.end, 40),
     [track]
   );
   const traveled = useMemo(() => {
-    const t = Math.min(1, Math.max(0, progress));
+    const raw = progressRef?.current ?? progress;
+    const t = Math.min(1, Math.max(0, raw));
     const n = Math.max(2, Math.floor(t * (fullPts.length - 1)) + 1);
     return fullPts.slice(0, n);
-  }, [fullPts, progress]);
+  }, [fullPts, progress, progressRef]);
 
   const tube = useMemo(() => {
     const curve = new THREE.CatmullRomCurve3(fullPts);
     return new THREE.TubeGeometry(
       curve,
-      48,
+      32,
       highlighted ? 0.016 : 0.01,
-      6,
+      5,
       false
     );
   }, [fullPts, highlighted]);
@@ -464,11 +471,13 @@ function EarthWithFallback({
 function Meteor({
   track,
   progress,
+  progressRef,
   highlighted,
   opacity,
 }: {
   track: MeteorTrack;
   progress: number;
+  progressRef?: MutableRefObject<number>;
   highlighted: boolean;
   opacity: number;
 }) {
@@ -569,7 +578,8 @@ function Meteor({
       if (sparksRef.current) sparksRef.current.visible = false;
       return;
     }
-    const t = Math.min(1, Math.max(0, progress));
+    const raw = progressRef?.current ?? progress;
+    const t = Math.min(1, Math.max(0, raw));
     bezierPoint(track.start, track.mid, track.end, t, pos.current);
     bezierTangent(track.start, track.mid, track.end, t, dir.current);
 
@@ -839,6 +849,7 @@ function FireballImpacts({
 function FollowCamera({
   playing,
   progress,
+  progressRef,
   primaryTrack,
   primaryDes,
   orbits,
@@ -848,6 +859,7 @@ function FollowCamera({
 }: {
   playing: boolean;
   progress: number;
+  progressRef?: MutableRefObject<number>;
   primaryTrack: MeteorTrack | null;
   primaryDes?: string | null;
   orbits: Record<string, OrbitElements>;
@@ -905,7 +917,11 @@ function FollowCamera({
     const controls = controlsRef.current;
     if (!controls) return;
 
-    const t = Math.min(1, Math.max(0, progress));
+    const raw =
+      progressRef && typeof progressRef.current === "number"
+        ? progressRef.current
+        : progress;
+    const t = Math.min(1, Math.max(0, raw));
 
     // Heliocentric position along the (compact) orbit ellipse
     const des = primaryDes || primaryTrack.des || primaryTrack.id;
@@ -1011,6 +1027,7 @@ function SceneContent({
   paused,
   playing,
   progress,
+  progressRef,
   orbits,
   onLodChange,
   blendRef,
@@ -1025,6 +1042,7 @@ function SceneContent({
   paused: boolean;
   playing: boolean;
   progress: number;
+  progressRef?: MutableRefObject<number>;
   orbits: Record<string, OrbitElements>;
   onLodChange?: Props["onLodChange"];
   blendRef: MutableRefObject<number>;
@@ -1050,9 +1068,15 @@ function SceneContent({
   const [blend, setBlend] = useState(0);
 
   // Mirror blendRef into React state at a low rate for material opacity
+  const lastBlendUi = useRef(0);
   useFrame(() => {
     const b = blendRef.current;
-    setBlend((prev) => (Math.abs(prev - b) > 0.02 ? b : prev));
+    const now = performance.now();
+    if (now - lastBlendUi.current < 80) return;
+    if (Math.abs(blend - b) > 0.04) {
+      lastBlendUi.current = now;
+      setBlend(b);
+    }
   });
 
   const earthFade = 1 - blend;
@@ -1064,13 +1088,13 @@ function SceneContent({
     <>
       <color attach="background" args={["#020617"]} />
       <Stars
-        radius={420}
-        depth={120}
-        count={5500}
-        factor={3.2}
+        radius={280}
+        depth={80}
+        count={1600}
+        factor={2.4}
         saturation={0}
         fade
-        speed={paused ? 0 : 0.35}
+        speed={paused ? 0 : 0.2}
       />
 
       <LodController
@@ -1083,6 +1107,7 @@ function SceneContent({
       <FollowCamera
         playing={playing && !paused}
         progress={progress}
+        progressRef={progressRef}
         primaryTrack={primaryTrack}
         primaryDes={
           risks.find((r) => (r.id || r.des) === primaryId)?.des ??
@@ -1140,6 +1165,7 @@ function SceneContent({
             <TrajectoryRibbon
               track={t}
               progress={progress}
+              progressRef={progressRef}
               highlighted={t.id === primaryId}
               opacity={earthFade}
             />
@@ -1150,7 +1176,7 @@ function SceneContent({
               countryLabel={
                 t.id === primaryId &&
                 impactCountryReady &&
-                progress >= 0.92
+                (progressRef?.current ?? progress) >= 0.92
                   ? impactCountry ?? null
                   : undefined
               }
@@ -1158,6 +1184,7 @@ function SceneContent({
             <Meteor
               track={t}
               progress={progress}
+              progressRef={progressRef}
               highlighted={t.id === primaryId}
               opacity={earthFade}
             />
@@ -1201,6 +1228,7 @@ export default function EarthGlobe({
   primaryId,
   className,
   progress = 0,
+  progressRef,
   playing = false,
   orbits = {},
   orbitsLoading = false,
@@ -1240,7 +1268,7 @@ export default function EarthGlobe({
   );
 
   const onCreated = useCallback(({ gl }: { gl: THREE.WebGLRenderer }) => {
-    gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     gl.outputColorSpace = THREE.SRGBColorSpace;
   }, []);
 
@@ -1300,12 +1328,13 @@ export default function EarthGlobe({
             near: 0.08,
             far: 500,
           }}
-          dpr={[1, 1.75]}
+          dpr={[1, 1.25]}
           onCreated={onCreated}
           gl={{
-            antialias: true,
+            antialias: false,
             alpha: false,
             powerPreference: "high-performance",
+            stencil: false,
           }}
           onPointerDown={(e) => e.stopPropagation()}
         >
@@ -1321,6 +1350,7 @@ export default function EarthGlobe({
               paused={paused}
               playing={playing}
               progress={progress}
+              progressRef={progressRef}
               orbits={orbits}
               onLodChange={handleLod}
               blendRef={blendRef}

@@ -1,7 +1,5 @@
 "use client";
 
-import { LabelWithInfo } from "@/components/InfoTip";
-import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 
 type Props = {
@@ -28,9 +26,7 @@ export default function DataFreshness({ updatedAt, className }: Props) {
       className={`rounded-xl border border-cyan-900/50 bg-slate-950/80 px-3 py-2.5 sm:px-4 ${className ?? ""}`}
     >
       <p className="text-sm font-medium text-slate-100">
-        <LabelWithInfo tip={TIPS.dataAsOf} className="text-sm font-medium text-slate-100">
-          Data as of
-        </LabelWithInfo>{" "}
+        Data as of{" "}
         <span className="font-semibold text-cyan-300">
           {updatedAt ? formatAsOf(updatedAt) : "waiting for first fetch…"}
         </span>

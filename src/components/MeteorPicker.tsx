@@ -1,7 +1,7 @@
 "use client";
 
 import type { RiskEvent } from "@/types/neo";
-import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
+import InfoTip from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 import { formatImpactPercent } from "@/lib/format";
@@ -48,12 +48,9 @@ export default function MeteorPicker({
       <div className="shrink-0 border-b border-slate-800 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <LabelWithInfo
-              tip={TIPS.meteorsList}
-              className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90"
-            >
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
               Meteors
-            </LabelWithInfo>
+            </p>
             <p className="text-xs text-slate-400">
               {selectedCount} of {risks.length} selected · newest discovery first
             </p>
@@ -126,7 +123,6 @@ export default function MeteorPicker({
                       {isNew && (
                         <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-lime-500/20 px-1 py-0.5 text-[9px] font-bold tracking-wide text-lime-300 ring-1 ring-lime-400/40">
                           {LABELS.newBadge}
-                          <InfoTip text={TIPS.newBadge} label={`About ${LABELS.newBadge}`} />
                         </span>
                       )}
                     </span>

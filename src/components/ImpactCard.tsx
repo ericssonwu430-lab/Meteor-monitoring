@@ -40,11 +40,9 @@ export default function ImpactCard({ event, rank, hero, isNew }: Props) {
               }`}
             >
               <span>{event.fullname || event.des}</span>
-              <InfoTip text={TIPS.designation} label="About this name" />
               {isNew && (
                 <span className="inline-flex items-center gap-1 rounded bg-lime-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-lime-300 ring-1 ring-lime-400/40">
                   {LABELS.newBadge}
-                  <InfoTip text={TIPS.newBadge} label="About NEW" />
                 </span>
               )}
             </h3>

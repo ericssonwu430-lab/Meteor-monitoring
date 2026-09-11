@@ -348,7 +348,7 @@ export default function SolarSystemView({
               size={sizeBoost}
               label={p.name}
               opacity={opacity}
-              showLabel={opacity > 0.25}
+              showLabel={opacity > 0.65}
             />
           </group>
         );
@@ -392,6 +392,7 @@ export default function SolarSystemView({
               ipLabel={formatImpactPercent(r.ip)}
               highlighted={highlighted}
               opacity={opacity}
+              showLabel={highlighted && opacity > 0.4}
             />
           </group>
         );
