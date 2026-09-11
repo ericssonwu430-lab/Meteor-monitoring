@@ -1,5 +1,8 @@
 "use client";
 
+import { LabelWithInfo } from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
+
 type Props = {
   minIp: number;
   onMinIpChange: (v: number) => void;
@@ -16,9 +19,12 @@ const PRESETS = [
 export default function Filters({ minIp, onMinIpChange }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs uppercase tracking-wider text-slate-400">
+      <LabelWithInfo
+        tip={TIPS.minImpactProb}
+        className="text-xs uppercase tracking-wider text-slate-400"
+      >
         Min impact prob
-      </span>
+      </LabelWithInfo>
       {PRESETS.map((p) => (
         <button
           key={p.label}

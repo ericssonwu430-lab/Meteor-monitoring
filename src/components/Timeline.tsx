@@ -1,6 +1,8 @@
 "use client";
 
 import type { CloseApproach, Fireball } from "@/types/neo";
+import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
 import { formatAu } from "@/lib/format";
 
 type Props = {
@@ -46,8 +48,14 @@ export default function Timeline({ approaches, fireballs }: Props) {
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900/60">
-      <div className="border-b border-slate-800 px-4 py-3 text-sm font-medium text-slate-200">
-        Events · close approaches (next 60d) & recent fireballs
+      <div className="flex items-center gap-1.5 border-b border-slate-800 px-4 py-3 text-sm font-medium text-slate-200">
+        <LabelWithInfo tip={TIPS.eventsFeed} className="text-sm font-medium text-slate-200">
+          Events
+        </LabelWithInfo>
+        <span className="text-slate-500">·</span>
+        <span className="text-xs font-normal text-slate-400">
+          close approaches (next 60d) &amp; recent fireballs
+        </span>
       </div>
       <ul className="max-h-[420px] overflow-y-auto divide-y divide-slate-800">
         {sorted.length === 0 && (
@@ -75,13 +83,17 @@ export default function Timeline({ approaches, fireballs }: Props) {
               <p className="truncate text-xs text-slate-400">{item.detail}</p>
             </div>
             <span
-              className={`shrink-0 self-center rounded px-1.5 py-0.5 text-[10px] uppercase ${
+              className={`inline-flex shrink-0 items-center gap-0.5 self-center rounded px-1.5 py-0.5 text-[10px] uppercase ${
                 item.kind === "cad"
                   ? "bg-cyan-950 text-cyan-300"
                   : "bg-amber-950 text-amber-300"
               }`}
             >
               {item.kind === "cad" ? "CAD" : "FB"}
+              <InfoTip
+                text={item.kind === "cad" ? TIPS.closeApproach : TIPS.fireballs}
+                label={item.kind === "cad" ? "About CAD" : "About fireballs"}
+              />
             </span>
           </li>
         ))}

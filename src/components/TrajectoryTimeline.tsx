@@ -1,6 +1,8 @@
 "use client";
 
 import type { LodMode } from "@/components/EarthGlobe";
+import { LabelWithInfo } from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
 
 type Props = {
   progress: number;
@@ -46,9 +48,12 @@ export default function TrajectoryTimeline({
     >
       {!compact && (
         <div className="mb-1 flex items-center justify-between gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
+          <LabelWithInfo
+            tip={TIPS.trajectory}
+            className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90"
+          >
             Trajectory
-          </p>
+          </LabelWithInfo>
           <p className="font-mono text-[10px] text-slate-500">{pct}%</p>
         </div>
       )}

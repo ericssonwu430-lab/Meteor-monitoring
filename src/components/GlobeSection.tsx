@@ -15,6 +15,8 @@ import MeteorDetail from "@/components/MeteorDetail";
 import TrajectoryTimeline from "@/components/TrajectoryTimeline";
 import DataFreshness from "@/components/DataFreshness";
 import ImpactCard from "@/components/ImpactCard";
+import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
 import Filters from "@/components/Filters";
 import FireballMap from "@/components/FireballMap";
 import Timeline from "@/components/Timeline";
@@ -62,6 +64,9 @@ type Props = {
   minIp?: number;
   onMinIpChange?: (v: number) => void;
   onRefresh?: () => void;
+  /** Object ids that should show [NEW] after a refresh */
+  newIds?: Set<string>;
+  newBadgeHours?: number;
 };
 
 export default function GlobeSection({
@@ -74,6 +79,8 @@ export default function GlobeSection({
   minIp = 0,
   onMinIpChange,
   onRefresh,
+  newIds,
+  newBadgeHours = 24,
 }: Props) {
   const cardRisks = listRisks ?? risks;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -158,9 +165,10 @@ export default function GlobeSection({
   }, []);
 
   const onSelectAll = useCallback(() => {
-    setSelectedIds(new Set(risks.map(riskId)));
-    setPrimaryId((prev) => prev ?? (risks[0] ? riskId(risks[0]) : null));
-  }, [risks]);
+    const pool = listRisks ?? risks;
+    setSelectedIds(new Set(pool.map(riskId)));
+    setPrimaryId((prev) => prev ?? (pool[0] ? riskId(pool[0]) : null));
+  }, [listRisks, risks]);
 
   const onClear = useCallback(() => {
     setSelectedIds(new Set());
@@ -449,7 +457,21 @@ export default function GlobeSection({
                     : "text-slate-300 hover:bg-slate-900 hover:text-cyan-200"
                 }`}
               >
-                {t.label}
+                <span className="inline-flex items-center justify-center gap-1">
+                  {t.label}
+                  <InfoTip
+                    text={
+                      t.id === "meteors"
+                        ? TIPS.meteorsList
+                        : t.id === "details"
+                          ? TIPS.focusedMeteor
+                          : t.id === "activity"
+                            ? TIPS.eventsFeed
+                            : "What this app shows, data sources, and privacy notes."
+                    }
+                    label={`About ${t.label}`}
+                  />
+                </span>
                 {t.id === "meteors" && selectedIds.size > 0 && (
                   <span
                     className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
@@ -474,8 +496,15 @@ export default function GlobeSection({
                 {onMinIpChange && (
                   <Filters minIp={minIp} onMinIpChange={onMinIpChange} />
                 )}
+                <p className="text-[10px] leading-relaxed text-slate-500">
+                  Sorted by discovery (newest first). Objects that appear after a
+                  refresh show{" "}
+                  <span className="font-semibold text-lime-400">[NEW]</span> for{" "}
+                  {newBadgeHours}h on this device only.
+                </p>
                 <MeteorPicker
-                  risks={risks}
+                  newIds={newIds}
+                  risks={cardRisks}
                   selectedIds={selectedIds}
                   primaryId={primaryId}
                   onToggle={onToggle}
@@ -486,12 +515,17 @@ export default function GlobeSection({
                 />
                 {cardRisks.length > 0 && (
                   <div>
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      Risk cards ({cardRisks.length}
-                      {totalRiskCount != null && totalRiskCount !== cardRisks.length
-                        ? ` of ${totalRiskCount}`
-                        : ""}
-                      )
+                    <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      <LabelWithInfo tip={TIPS.riskCards} className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                        Risk cards
+                      </LabelWithInfo>
+                      <span>
+                        ({cardRisks.length}
+                        {totalRiskCount != null && totalRiskCount !== cardRisks.length
+                          ? ` of ${totalRiskCount}`
+                          : ""}
+                        )
+                      </span>
                     </h3>
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {cardRisks.slice(0, 30).map((ev, i) => (
@@ -499,6 +533,7 @@ export default function GlobeSection({
                           key={ev.id || ev.des}
                           event={ev}
                           rank={i + 1}
+                          isNew={newIds?.has(riskId(ev)) ?? false}
                         />
                       ))}
                     </div>
@@ -526,7 +561,7 @@ export default function GlobeSection({
                 />
                 {top && (
                   <div className="space-y-3">
-                    <ImpactCard event={top} rank={1} hero />
+                    <ImpactCard event={top} rank={1} isNew={newIds?.has(riskId(top)) ?? false} hero />
                     <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
                       <p className="text-xs uppercase text-slate-500">
                         Highest IP (filtered)
@@ -553,7 +588,9 @@ export default function GlobeSection({
                   not the same as Sentry&apos;s future impact-risk asteroids.
                 </div>
                 <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-200">
-                  <span>Show fireballs on the 3D map</span>
+                  <LabelWithInfo tip={TIPS.fireballs} className="text-sm text-slate-200">
+                    Show fireballs on the 3D map
+                  </LabelWithInfo>
                   <input
                     type="checkbox"
                     className="h-5 w-5 accent-cyan-500"

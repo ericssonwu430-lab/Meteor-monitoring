@@ -1,12 +1,15 @@
 "use client";
 
 import type { RiskEvent } from "@/types/neo";
+import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
 import { formatImpactPercent } from "@/lib/format";
 
 type Props = {
   risks: RiskEvent[];
   selectedIds: Set<string>;
   primaryId?: string | null;
+  newIds?: Set<string>;
   onToggle: (id: string) => void;
   onPrimary?: (id: string) => void;
   onSelectAll: () => void;
@@ -28,6 +31,7 @@ export default function MeteorPicker({
   risks,
   selectedIds,
   primaryId,
+  newIds,
   onToggle,
   onPrimary,
   onSelectAll,
@@ -43,11 +47,14 @@ export default function MeteorPicker({
       <div className="shrink-0 border-b border-slate-800 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
+            <LabelWithInfo
+              tip={TIPS.meteorsList}
+              className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90"
+            >
               Meteors
-            </p>
+            </LabelWithInfo>
             <p className="text-xs text-slate-400">
-              {selectedCount} of {risks.length} selected
+              {selectedCount} of {risks.length} selected · newest discovery first
             </p>
           </div>
           <div className="flex gap-1.5">
@@ -68,7 +75,9 @@ export default function MeteorPicker({
           </div>
         </div>
         <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
-          Check trails on the globe. Tap a name to focus origin details.
+          Check trails on the globe. Tap a name to focus origin details.{" "}
+          <span className="text-lime-400/90">[NEW]</span> marks objects that
+          appeared after a refresh (kept ~24h on this device).
         </p>
       </div>
 
@@ -82,6 +91,7 @@ export default function MeteorPicker({
           const id = riskId(r);
           const checked = selectedIds.has(id);
           const focused = primaryId === id;
+          const isNew = newIds?.has(id) ?? false;
           const ip = parseFloat(r.ip) || 0;
           const name = displayName(r);
           return (
@@ -108,8 +118,16 @@ export default function MeteorPicker({
                   className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-slate-100">
-                      {name}
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-xs font-medium text-slate-100">
+                        {name}
+                      </span>
+                      {isNew && (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-lime-500/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-lime-300 ring-1 ring-lime-400/40">
+                          NEW
+                          <InfoTip text={TIPS.newBadge} label="About NEW" />
+                        </span>
+                      )}
                     </span>
                     {name !== r.des && (
                       <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">
@@ -118,7 +136,7 @@ export default function MeteorPicker({
                     )}
                   </span>
                   <span
-                    className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${
+                    className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${
                       ip >= 0.01
                         ? "bg-red-950/80 text-red-300"
                         : ip >= 0.001
@@ -127,9 +145,12 @@ export default function MeteorPicker({
                             ? "bg-amber-950/80 text-amber-300"
                             : "bg-slate-800 text-cyan-300/90"
                     }`}
-                    title="Impact probability"
                   >
                     {formatImpactPercent(ip)}
+                    <InfoTip
+                      text={TIPS.impactProbability}
+                      label="About impact probability"
+                    />
                   </span>
                 </button>
               </div>

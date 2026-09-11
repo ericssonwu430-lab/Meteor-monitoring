@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { SentryDetailResponse, VirtualImpactor } from "@/types/neo";
+import InfoTip from "@/components/InfoTip";
+import { TIPS } from "@/lib/glossary";
 import {
   formatDiameterKm,
   formatImpactPercent,
@@ -76,7 +78,7 @@ export default function ObjectDetailPage() {
               <span
                 className={`rounded px-2 py-0.5 font-semibold ${torinoColor(summary.ts_max)}`}
               >
-                Torino {summary.ts_max ?? "0"}
+                Torino {summary.ts_max ?? "0"} <InfoTip text={TIPS.torino} label="About Torino" />
               </span>
               <span className="rounded bg-indigo-900/80 px-2 py-0.5 text-indigo-200">
                 Palermo max {formatPalermo(summary.ps_max)} · cum{" "}
@@ -145,9 +147,9 @@ export default function ObjectDetailPage() {
                 <thead className="bg-slate-900 text-xs uppercase text-slate-400">
                   <tr>
                     <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">IP</th>
-                    <th className="px-3 py-2">Palermo</th>
-                    <th className="px-3 py-2">Torino</th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">IP<InfoTip text={TIPS.impactProbability} label="About IP" /></span></th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">Palermo<InfoTip text={TIPS.palermo} label="About Palermo" /></span></th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">Torino<InfoTip text={TIPS.torino} label="About Torino" /></span></th>
                     <th className="px-3 py-2">Energy</th>
                     <th className="px-3 py-2">σ VI</th>
                   </tr>

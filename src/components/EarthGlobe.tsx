@@ -340,9 +340,9 @@ function Atmosphere({ opacity = 1 }: { opacity?: number }) {
   return (
     <Sphere args={[EARTH_RADIUS * 1.045, 32, 32]}>
       <meshBasicMaterial
-        color="#38bdf8"
+        color="#7dd3fc"
         transparent
-        opacity={0.08 * opacity}
+        opacity={0.06 * opacity}
         side={THREE.BackSide}
         depthWrite={false}
       />
@@ -374,8 +374,11 @@ function TexturedEarth({
         <meshPhongMaterial
           map={map}
           specularMap={spec}
-          specular={new THREE.Color("#335566")}
-          shininess={12}
+          specular={new THREE.Color("#88aabb")}
+          shininess={10}
+          emissive={new THREE.Color("#ffffff")}
+          emissiveMap={map}
+          emissiveIntensity={0.28}
           transparent={opacity < 0.98}
           opacity={opacity}
         />
@@ -384,11 +387,11 @@ function TexturedEarth({
         <meshPhongMaterial
           map={clouds}
           transparent
-          opacity={0.35 * opacity}
+          opacity={0.2 * opacity}
           depthWrite={false}
         />
       </Sphere>
-      <Atmosphere opacity={opacity} />
+      <Atmosphere opacity={opacity * 0.85} />
     </group>
   );
 }
@@ -405,27 +408,28 @@ function ProceduralEarth({
     <group visible={opacity > 0.02}>
       <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
         <meshPhongMaterial
-          color="#1d4f8c"
-          emissive="#0a1f33"
-          specular="#4a90a4"
-          shininess={18}
+          color="#3b82c4"
+          emissive="#1e3a5f"
+          emissiveIntensity={0.45}
+          specular="#9ec5d8"
+          shininess={14}
           transparent={opacity < 0.98}
           opacity={opacity}
         />
       </Sphere>
       <Sphere args={[EARTH_RADIUS * 1.002, 48, 48]}>
         <meshBasicMaterial
-          color="#1a7a4c"
+          color="#3d9a5c"
           transparent
-          opacity={0.28 * opacity}
+          opacity={0.42 * opacity}
           depthWrite={false}
         />
       </Sphere>
       <Sphere ref={cloudRef} args={[EARTH_RADIUS * 1.015, 48, 48]}>
         <meshPhongMaterial
-          color="#e2e8f0"
+          color="#f1f5f9"
           transparent
-          opacity={0.1 * opacity}
+          opacity={0.08 * opacity}
           depthWrite={false}
         />
       </Sphere>
@@ -1080,16 +1084,24 @@ function SceneContent({
 
       {/* Near-Earth LOD — textured globe + atmospheric trails at Earth's heliocentric seat */}
       <group position={earthPos}>
-        <ambientLight intensity={0.35 * earthFade} />
-        <directionalLight
-          position={[5, 3, 5]}
-          intensity={1.35 * earthFade}
-          color="#fff6e8"
+        <ambientLight intensity={0.72 * earthFade} />
+        <hemisphereLight
+          args={["#e8f4ff", "#1a2a1a", 0.55 * earthFade]}
         />
         <directionalLight
-          position={[-4, -2, -3]}
-          intensity={0.25 * earthFade}
-          color="#93c5fd"
+          position={[5, 3, 5]}
+          intensity={2.25 * earthFade}
+          color="#fffaf0"
+        />
+        <directionalLight
+          position={[-4, -1, -3]}
+          intensity={0.7 * earthFade}
+          color="#b8d4ff"
+        />
+        <directionalLight
+          position={[0, 6, -2]}
+          intensity={0.45 * earthFade}
+          color="#ffffff"
         />
         <EarthWithFallback autoRotate={!paused} opacity={earthFade} />
         {visibleTracks.map((t) => (
