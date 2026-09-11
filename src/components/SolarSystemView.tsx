@@ -109,6 +109,9 @@ function KeplerBody({
   highlighted,
   opacity = 1,
   showLabel = true,
+  /** Lower = larger on-screen at distance (drei Html). Planets use ~9; NEOs keep default 16. */
+  labelDistanceFactor = 16,
+  largeLabel = false,
 }: {
   el: KeplerEl;
   progress: number;
@@ -119,6 +122,9 @@ function KeplerBody({
   highlighted?: boolean;
   opacity?: number;
   showLabel?: boolean;
+  labelDistanceFactor?: number;
+  /** Larger CSS + padding for planet names readable when zoomed out */
+  largeLabel?: boolean;
 }) {
   const ref = useRef<THREE.Group>(null);
   const pos = useMemo(() => new THREE.Vector3(), []);
@@ -156,12 +162,16 @@ function KeplerBody({
       {showLabel && opacity > 0.35 && (
         <Html
           center
-          distanceFactor={16}
+          distanceFactor={labelDistanceFactor}
           style={{ pointerEvents: "none" }}
           zIndexRange={[80, 0]}
         >
           <div
-            className={`-translate-y-5 whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] shadow-lg backdrop-blur-sm ${
+            className={`-translate-y-5 whitespace-nowrap rounded-md border font-mono shadow-lg backdrop-blur-sm ${
+              largeLabel
+                ? "px-2 py-1 text-xs font-semibold sm:text-sm"
+                : "px-1.5 py-0.5 text-[10px]"
+            } ${
               highlighted
                 ? "border-amber-400/80 bg-slate-950/90 text-amber-100"
                 : "border-slate-600/60 bg-slate-950/70 text-slate-200"
@@ -294,9 +304,9 @@ export default function SolarSystemView({
           />
         </mesh>
         {opacity > 0.4 && (
-          <Html center distanceFactor={24} style={{ pointerEvents: "none" }}>
+          <Html center distanceFactor={10} style={{ pointerEvents: "none" }}>
             <div
-              className="translate-y-8 whitespace-nowrap font-mono text-[11px] font-semibold text-amber-200/95"
+              className="translate-y-8 whitespace-nowrap rounded-md border border-amber-500/40 bg-slate-950/60 px-2 py-1 font-mono text-xs font-semibold text-amber-200/95 shadow-lg backdrop-blur-sm sm:text-sm"
               style={{ opacity }}
             >
               Sun
@@ -353,6 +363,8 @@ export default function SolarSystemView({
               label={p.name}
               opacity={opacity}
               showLabel={opacity > 0.65}
+              largeLabel
+              labelDistanceFactor={9}
             />
           </group>
         );
