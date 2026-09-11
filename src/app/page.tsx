@@ -123,24 +123,12 @@ export default function DashboardPage() {
             </>
           )}
         </p>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <MapViewControls
-            showPlanets={showPlanets}
-            showFireballs={showFireballs}
-            onShowPlanetsChange={setShowPlanets}
-            onShowFireballsChange={setShowFireballs}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (risks.length === 0) setLoading(true);
-              load();
-            }}
-            className="min-h-9 rounded-lg border border-slate-700 px-2.5 text-xs text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
-          >
-            Refresh
-          </button>
-        </div>
+        <MapViewControls
+          showPlanets={showPlanets}
+          showFireballs={showFireballs}
+          onShowPlanetsChange={setShowPlanets}
+          onShowFireballsChange={setShowFireballs}
+        />
       </div>
 
       {loading && risks.length === 0 && (
