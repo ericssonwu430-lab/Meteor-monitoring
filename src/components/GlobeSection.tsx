@@ -11,6 +11,7 @@ import type {
 } from "@/types/neo";
 import type { LodMode } from "@/components/EarthGlobe";
 import MeteorPicker from "@/components/MeteorPicker";
+import MapViewControls from "@/components/MapViewControls";
 import MeteorDetail from "@/components/MeteorDetail";
 import TrajectoryTimeline, {
   type PlaybackSpeed,
@@ -94,6 +95,7 @@ export default function GlobeSection({
   const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   const [lodMode, setLodMode] = useState<LodMode>("earth");
   const [showFireballs, setShowFireballs] = useState(true);
+  const [showPlanets, setShowPlanets] = useState(true);
   const [orbits, setOrbits] = useState<Record<string, OrbitElements>>({});
   const [orbitLoading, setOrbitLoading] = useState<Record<string, boolean>>({});
   const orbitCache = useRef<Record<string, OrbitElements>>({});
@@ -106,41 +108,52 @@ export default function GlobeSection({
   const countryCache = useRef<Record<string, string | null>>({});
   const sentryCache = useRef<Record<string, SentryDetailResponse>>({});
 
-  const idsKey = useMemo(() => risks.map(riskId).join("|"), [risks]);
+  const idsKey = useMemo(
+    () => cardRisks.map(riskId).join("|"),
+    [cardRisks]
+  );
 
   useEffect(() => {
-    if (risks.length === 0) {
+    if (cardRisks.length === 0) {
       setSelectedIds(new Set());
       setPrimaryId(null);
       setInitialized(true);
       return;
     }
     if (!initialized) {
-      const top = risks.slice(0, Math.min(DEFAULT_SELECT, risks.length));
-      setSelectedIds(new Set(top.map(riskId)));
-      setPrimaryId(top[0] ? riskId(top[0]) : null);
+      // Prefer highest-IP slice for initial globe selection when available
+      const seed = (risks.length ? risks : cardRisks).slice(
+        0,
+        Math.min(DEFAULT_SELECT, risks.length || cardRisks.length)
+      );
+      setSelectedIds(new Set(seed.map(riskId)));
+      setPrimaryId(seed[0] ? riskId(seed[0]) : null);
       setInitialized(true);
       return;
     }
     setSelectedIds((prev) => {
-      const valid = new Set(risks.map(riskId));
+      const valid = new Set(cardRisks.map(riskId));
       const next = new Set<string>();
       prev.forEach((id) => {
         if (valid.has(id)) next.add(id);
       });
-      if (next.size === 0 && risks.length > 0) {
-        risks.slice(0, Math.min(DEFAULT_SELECT, risks.length)).forEach((r) => {
-          next.add(riskId(r));
-        });
+      // Keep newly appeared list objects selectable — do not drop them
+      if (next.size === 0 && cardRisks.length > 0) {
+        const seed = (risks.length ? risks : cardRisks).slice(
+          0,
+          Math.min(DEFAULT_SELECT, risks.length || cardRisks.length)
+        );
+        seed.forEach((r) => next.add(riskId(r)));
       }
       return next;
     });
     setPrimaryId((prev) => {
-      const valid = new Set(risks.map(riskId));
+      const valid = new Set(cardRisks.map(riskId));
       if (prev && valid.has(prev)) return prev;
-      return risks[0] ? riskId(risks[0]) : null;
+      const seed = risks[0] ?? cardRisks[0];
+      return seed ? riskId(seed) : null;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-sync when risk id set changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-sync when full list id set changes
   }, [idsKey]);
 
   const onToggle = useCallback((id: string) => {
@@ -168,10 +181,17 @@ export default function GlobeSection({
   }, []);
 
   const onSelectAll = useCallback(() => {
-    const pool = listRisks ?? risks;
+    const pool = cardRisks;
     setSelectedIds(new Set(pool.map(riskId)));
     setPrimaryId((prev) => prev ?? (pool[0] ? riskId(pool[0]) : null));
-  }, [listRisks, risks]);
+  }, [cardRisks]);
+
+  const onSelectIds = useCallback((ids: string[]) => {
+    setSelectedIds(new Set(ids));
+    setPrimaryId((prev) =>
+      prev && ids.includes(prev) ? prev : ids[0] ?? null
+    );
+  }, []);
 
   const onClear = useCallback(() => {
     setSelectedIds(new Set());
@@ -190,12 +210,13 @@ export default function GlobeSection({
   }, [primaryId, selectedIds, selectedList]);
 
   const primaryRisk = useMemo(() => {
-    if (primaryId) {
-      const hit = risks.find((r) => riskId(r) === primaryId);
-      if (hit) return hit;
-    }
-    return null;
-  }, [primaryId, risks]);
+    if (!primaryId) return null;
+    return (
+      cardRisks.find((r) => riskId(r) === primaryId) ??
+      risks.find((r) => riskId(r) === primaryId) ??
+      null
+    );
+  }, [primaryId, cardRisks, risks]);
 
   // Fetch Sentry object detail (VI table / first_obs) for timeline dates
   useEffect(() => {
@@ -297,7 +318,7 @@ export default function GlobeSection({
   useEffect(() => {
     const dess = Array.from(
       new Set(
-        risks
+        cardRisks
           .filter((r) => selectedIds.has(riskId(r)))
           .map((r) => r.des)
           .filter(Boolean)
@@ -401,12 +422,29 @@ export default function GlobeSection({
   const orbitsLoading = useMemo(() => {
     if (!primaryRisk) {
       return selectedList.some((id) => {
-        const r = risks.find((x) => riskId(x) === id);
+        const r =
+          cardRisks.find((x) => riskId(x) === id) ??
+          risks.find((x) => riskId(x) === id);
         return r ? orbitLoading[r.des] && !orbits[r.des] : false;
       });
     }
     return !!orbitLoading[primaryRisk.des] && !orbits[primaryRisk.des];
   }, [orbitLoading, orbits, primaryRisk, selectedList, risks]);
+
+  /** Globe must include every selected list object — not only top-IP subset */
+  const globeRenderRisks = useMemo(() => {
+    const map = new Map<string, (typeof risks)[0]>();
+    for (const r of risks) map.set(riskId(r), r);
+    for (const r of cardRisks) {
+      const id = riskId(r);
+      if (selectedIds.has(id)) map.set(id, r);
+    }
+    if (primaryId) {
+      const hit = cardRisks.find((r) => riskId(r) === primaryId);
+      if (hit) map.set(primaryId, hit);
+    }
+    return Array.from(map.values());
+  }, [risks, cardRisks, selectedIds, primaryId]);
 
   const top = cardRisks[0];
 
@@ -419,9 +457,10 @@ export default function GlobeSection({
       {/* Hero globe — top center */}
       <div className="mx-auto w-full max-w-6xl">
         <EarthGlobe
-          risks={risks}
+          risks={globeRenderRisks}
           fireballs={fireballs}
           showFireballs={showFireballs}
+          showPlanets={showPlanets}
           impactCountry={impactCountry}
           impactCountryReady={impactCountryReady}
           selectedIds={selectedList}
@@ -433,6 +472,15 @@ export default function GlobeSection({
           orbitsLoading={orbitsLoading}
           onLodChange={({ mode }) => setLodMode(mode)}
         />
+
+        <div className="mt-2 flex justify-center px-1 sm:justify-start">
+          <MapViewControls
+            showPlanets={showPlanets}
+            showFireballs={showFireballs}
+            onShowPlanetsChange={setShowPlanets}
+            onShowFireballsChange={setShowFireballs}
+          />
+        </div>
 
         {/* Slim timeline directly under globe */}
         <TrajectoryTimeline
@@ -510,8 +558,8 @@ export default function GlobeSection({
                   <Filters minIp={minIp} onMinIpChange={onMinIpChange} />
                 )}
                 <p className="text-[10px] leading-relaxed text-slate-500">
-                  Sorted by discovery (newest first). Objects that appear after a
-                  refresh show{" "}
+                  Grouped by discovery year. Type in the search box to filter.
+                  Objects that appear after a refresh show{" "}
                   <span className="font-semibold text-lime-400">{LABELS.newBadge}</span>{" "}
                   for {newBadgeHours}h on this device only.
                 </p>
@@ -523,6 +571,7 @@ export default function GlobeSection({
                   onToggle={onToggle}
                   onPrimary={onPrimary}
                   onSelectAll={onSelectAll}
+                  onSelectIds={onSelectIds}
                   onClear={onClear}
                   className="max-h-none"
                 />

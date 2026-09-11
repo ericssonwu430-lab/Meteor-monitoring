@@ -33,7 +33,7 @@ import SolarSystemView, {
 import { compactOrbitElements, keplerPosition } from "@/lib/orbit";
 
 const EARTH_RADIUS = 1;
-const MAX_METEORS = 22;
+const MAX_METEORS = 40;
 const MAX_FIREBALLS = 40;
 const TRAIL_SEGMENTS = 28;
 const SPARK_COUNT = 8;
@@ -56,6 +56,8 @@ type Props = {
   fireballs: Fireball[];
   /** When false, hide fireball flashes on the globe */
   showFireballs?: boolean;
+  /** Show Mercury–Neptune in solar-system view */
+  showPlanets?: boolean;
   /** Best-effort impact country for the primary meteor (shown on Earth) */
   impactCountry?: string | null;
   impactCountryReady?: boolean;
@@ -1020,6 +1022,7 @@ function SceneContent({
   risks,
   fireballs,
   showFireballs,
+  showPlanets,
   impactCountry,
   impactCountryReady,
   selectedIds,
@@ -1035,6 +1038,7 @@ function SceneContent({
   risks: RiskEvent[];
   fireballs: Fireball[];
   showFireballs: boolean;
+  showPlanets: boolean;
   impactCountry?: string | null;
   impactCountryReady?: boolean;
   selectedIds: string[];
@@ -1048,7 +1052,12 @@ function SceneContent({
   blendRef: MutableRefObject<number>;
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const tracks = useMemo(() => buildTracks(risks), [risks]);
+  const tracks = useMemo(() => {
+    // Prefer selected objects so newly checked meteors always get a path
+    const selected = risks.filter((r) => selectedSet.has(r.id || r.des));
+    const rest = risks.filter((r) => !selectedSet.has(r.id || r.des));
+    return buildTracks([...selected, ...rest]);
+  }, [risks, selectedSet]);
   const visibleTracks = useMemo(
     () => tracks.filter((t) => selectedSet.has(t.id)),
     [tracks, selectedSet]
@@ -1131,6 +1140,7 @@ function SceneContent({
         fade={solarFade}
         showEarthBody={showSolarEarth}
         forceVisible={playing && !paused && progress < 0.9}
+        showPlanets={showPlanets}
       />
 
       {/* Near-Earth LOD — textured globe + atmospheric trails at Earth's heliocentric seat */}
@@ -1222,6 +1232,7 @@ export default function EarthGlobe({
   risks,
   fireballs,
   showFireballs = true,
+  showPlanets = true,
   impactCountry = null,
   impactCountryReady = false,
   selectedIds,
@@ -1343,6 +1354,7 @@ export default function EarthGlobe({
               risks={risks}
               fireballs={fireballs}
               showFireballs={showFireballs}
+              showPlanets={showPlanets}
               impactCountry={impactCountry}
               impactCountryReady={impactCountryReady}
               selectedIds={activeIds}

@@ -233,6 +233,8 @@ type Props = {
   showEarthBody?: boolean;
   /** Keep solar system readable even if camera LOD fade is mid-blend (e.g. during Play) */
   forceVisible?: boolean;
+  /** When false, hide Mercury–Neptune bodies/rings (Sun + NEO paths stay) */
+  showPlanets?: boolean;
 };
 
 export default function SolarSystemView({
@@ -244,6 +246,7 @@ export default function SolarSystemView({
   fade = 1,
   showEarthBody = true,
   forceVisible = false,
+  showPlanets = true,
 }: Props) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedRisks = useMemo(
@@ -303,7 +306,8 @@ export default function SolarSystemView({
       </group>
 
       {/* Major planets + orbit rings */}
-      {PLANET_ORBITS.map((p) => {
+      {showPlanets &&
+        PLANET_ORBITS.map((p) => {
         const el: KeplerEl = compactOrbitElements({
           a: p.a,
           e: p.e,
