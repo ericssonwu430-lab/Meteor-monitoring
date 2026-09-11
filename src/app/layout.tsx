@@ -1,0 +1,66 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Meteor Monitoring · NEO Impact Dashboard",
+  description:
+    "Live NASA/JPL Sentry impact risks, close approaches, and fireballs",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" className="dark">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <header className="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-lg">☄️</span>
+              <span className="font-semibold tracking-tight text-slate-100">
+                Meteor Monitoring
+              </span>
+              <span className="hidden rounded bg-cyan-950 px-1.5 py-0.5 text-[10px] font-medium uppercase text-cyan-300 sm:inline">
+                MVP
+              </span>
+            </Link>
+            <p className="text-[11px] text-slate-500">
+              Data: NASA/JPL Sentry · CAD · Fireball
+            </p>
+          </div>
+        </header>
+        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+        <footer className="mx-auto max-w-6xl border-t border-slate-800/60 px-4 py-6 text-center text-xs text-slate-500">
+          Impact % = Sentry <code className="text-slate-400">ip × 100</code>.
+          Not a prediction of imminent danger — most listed objects have
+          vanishingly small probabilities. Attribution:{" "}
+          <a
+            className="text-cyan-400 hover:underline"
+            href="https://ssd-api.jpl.nasa.gov/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            NASA/JPL SSD APIs
+          </a>
+          .
+        </footer>
+      </body>
+    </html>
+  );
+}
