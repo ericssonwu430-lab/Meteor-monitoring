@@ -1110,15 +1110,13 @@ export default function EarthGlobe({
         </Canvas>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 px-3 py-1.5 text-[11px] text-slate-500">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-slate-950/80 to-transparent px-3 pb-1.5 pt-6 text-[10px] text-slate-500">
         <span>
           {lodMode === "solar"
-            ? `${keplerCount}/${activeIds.length} Keplerian orbit${keplerCount === 1 ? "" : "s"} · ${AU_SCALE} u/AU`
-            : `${activeIds.length} trail${activeIds.length === 1 ? "" : "s"} · ${fbCount} fireball flashes`}
+            ? `${keplerCount}/${activeIds.length} Keplerian orbit${keplerCount === 1 ? "" : "s"}`
+            : `${activeIds.length} trail${activeIds.length === 1 ? "" : "s"} · ${fbCount} fireballs`}
           {orbitsLoading ? " · loading SBDB…" : ""}
-        </span>
-        <span className="text-slate-600">
-          {paused ? "Paused (tab hidden)" : playing ? "Playing" : "Scrub or play"}
+          {paused ? " · tab paused" : ""}
         </span>
       </div>
     </div>

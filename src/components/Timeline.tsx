@@ -47,7 +47,7 @@ export default function Timeline({ approaches, fireballs }: Props) {
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900/60">
       <div className="border-b border-slate-800 px-4 py-3 text-sm font-medium text-slate-200">
-        Timeline · close approaches (next 60d) & recent fireballs
+        Events · close approaches (next 60d) & recent fireballs
       </div>
       <ul className="max-h-[420px] overflow-y-auto divide-y divide-slate-800">
         {sorted.length === 0 && (

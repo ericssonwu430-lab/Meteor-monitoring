@@ -470,22 +470,6 @@ export default function GlobeSection({
         )}
       </div>
 
-      {/* Mobile: keep timeline reachable above home indicator when scrolling tabs */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-700 bg-slate-950/95 md:hidden"
-        style={{ paddingBottom: "max(0.35rem, env(safe-area-inset-bottom))" }}
-      >
-        <TrajectoryTimeline
-          progress={progress}
-          playing={playing}
-          onProgressChange={setProgress}
-          onPlayingChange={setPlaying}
-          lodMode={lodMode}
-          disabled={selectedList.length === 0}
-          compact
-        />
-      </div>
-      <div className="h-20 md:hidden" aria-hidden />
     </div>
   );
 }
