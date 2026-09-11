@@ -11,6 +11,8 @@ type Props = {
   labelStart?: string;
   labelMid?: string;
   labelEnd?: string;
+  /** Potential impact country (best-effort reverse-geocode) */
+  impactCountry?: string | null;
   disabled?: boolean;
   className?: string;
   compact?: boolean;
@@ -25,6 +27,7 @@ export default function TrajectoryTimeline({
   labelStart,
   labelMid,
   labelEnd,
+  impactCountry,
   disabled,
   className,
   compact,
@@ -35,8 +38,15 @@ export default function TrajectoryTimeline({
     labelStart ?? (solarish ? "Orbit start" : "Approach");
   const end =
     labelEnd ??
-    labelMid ??
     (solarish ? "Full orbit" : "Impact zone");
+  const mid = labelMid;
+
+  const countryLine =
+    impactCountry === undefined
+      ? null
+      : impactCountry
+        ? `Impact country: ${impactCountry}`
+        : "Impact country: undetermined";
 
   return (
     <div
@@ -79,11 +89,20 @@ export default function TrajectoryTimeline({
             aria-label="Scrub trajectory"
             className="traj-range w-full cursor-pointer disabled:cursor-not-allowed"
           />
-          <div className="flex justify-between text-[10px] text-slate-500">
-            <span>{start}</span>
-            <span className="font-mono text-slate-600">{pct}%</span>
-            <span>{end}</span>
+          <div className="flex justify-between gap-1 text-[10px] text-slate-500">
+            <span className="min-w-0 truncate font-mono tabular-nums">{start}</span>
+            <span className="shrink-0 font-mono text-slate-600">
+              {mid ? mid : `${pct}%`}
+            </span>
+            <span className="min-w-0 truncate text-right font-mono tabular-nums">
+              {end}
+            </span>
           </div>
+          {countryLine && (
+            <p className="mt-0.5 truncate text-right text-[10px] text-amber-200/80">
+              {countryLine}
+            </p>
+          )}
         </div>
       </div>
     </div>

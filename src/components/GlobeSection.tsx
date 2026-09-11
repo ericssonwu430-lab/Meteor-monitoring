@@ -578,14 +578,15 @@ export default function GlobeSection({
                   thin timeline under the globe to scrub trajectories.
                 </p>
                 <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-                  <strong className="text-slate-100">Privacy:</strong> This app
-                  has no accounts, no cookies for identity, and no analytics. It
-                  does not collect your name, email, or device location. Your
-                  browser only loads this site and public NASA/JPL sky data via
-                  our server. Optional impact-country lookup sends only asteroid
-                  map coordinates (not yours) to OpenStreetMap Nominatim.
-                  Hosting providers (e.g. Vercel) may still see normal web logs
-                  such as IP addresses — that is outside this app&apos;s
+                  <strong className="text-slate-100">Privacy:</strong> No
+                  accounts, identity cookies, localStorage of personal data, or
+                  analytics. We do not collect your name, email, or location.
+                  The browser only talks to this app&apos;s{" "}
+                  <code className="text-slate-400">/api/*</code> routes (plus
+                  static Earth textures). NASA/JPL and reverse-geocode calls run
+                  on the server; geocode uses asteroid path coordinates only —
+                  never your IP or device location. Hosting providers may still
+                  keep standard server logs (e.g. IP) outside this app&apos;s
                   control.
                 </div>
               </div>

@@ -24,8 +24,8 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
 import { formatImpactPercent } from "@/lib/format";
+import { hashString, seededUnit } from "@/lib/meteorTrack";
 import SolarSystemView, {
-  AU_SCALE,
   earthHeliocentricPosition,
 } from "@/components/SolarSystemView";
 
@@ -68,6 +68,8 @@ type MeteorTrack = {
   label: string;
   ip: number;
   ipLabel: string;
+  lat: number;
+  lon: number;
   start: THREE.Vector3;
   mid: THREE.Vector3;
   end: THREE.Vector3;
@@ -90,19 +92,6 @@ class TextureErrorBoundary extends Component<
   }
 }
 
-function hashString(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function seededUnit(seed: number, salt: number): number {
-  const x = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -158,6 +147,8 @@ function buildTracks(risks: RiskEvent[]): MeteorTrack[] {
       label: displayName(r),
       ip,
       ipLabel: formatImpactPercent(ip),
+      lat,
+      lon,
       start,
       mid,
       end,
@@ -806,24 +797,136 @@ function FireballImpacts({
   );
 }
 
+
+function FollowCamera({
+  playing,
+  progress,
+  primaryTrack,
+  earthPos,
+  controlsRef,
+  followActiveRef,
+}: {
+  playing: boolean;
+  progress: number;
+  primaryTrack: MeteorTrack | null;
+  earthPos: THREE.Vector3;
+  controlsRef: MutableRefObject<OrbitControlsImpl | null>;
+  followActiveRef: MutableRefObject<boolean>;
+}) {
+  const { camera } = useThree();
+  const userOverride = useRef(false);
+  const wasPlaying = useRef(false);
+  const meteorLocal = useRef(new THREE.Vector3());
+  const meteorWorld = useRef(new THREE.Vector3());
+  const desiredTarget = useRef(new THREE.Vector3());
+  const desiredCam = useRef(new THREE.Vector3());
+  const viewOffset = useRef(new THREE.Vector3(0.35, 0.55, 1));
+
+  // Resume follow when Play is pressed again
+  useEffect(() => {
+    if (playing && !wasPlaying.current) {
+      userOverride.current = false;
+    }
+    wasPlaying.current = playing;
+  }, [playing]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let controls: OrbitControlsImpl | null = null;
+    const onStart = () => {
+      userOverride.current = true;
+    };
+    // OrbitControls ref may not be ready on first paint
+    const tryAttach = () => {
+      if (cancelled) return;
+      controls = controlsRef.current;
+      if (!controls) {
+        raf = requestAnimationFrame(tryAttach);
+        return;
+      }
+      controls.addEventListener("start", onStart);
+    };
+    let raf = requestAnimationFrame(tryAttach);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      controls?.removeEventListener("start", onStart);
+    };
+  }, [controlsRef]);
+
+  useFrame((_, dt) => {
+    const following =
+      playing && !userOverride.current && primaryTrack != null;
+    followActiveRef.current = following;
+    if (!following || !primaryTrack) return;
+
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    const t = Math.min(1, Math.max(0, progress));
+    bezierPoint(
+      primaryTrack.start,
+      primaryTrack.mid,
+      primaryTrack.end,
+      t,
+      meteorLocal.current
+    );
+    meteorWorld.current.copy(meteorLocal.current).add(earthPos);
+
+    // Path span → pull back when approach starts farther out
+    const pathSpan = primaryTrack.start.length();
+    const farDist = Math.min(9.5, Math.max(3.4, pathSpan * 1.45));
+    const nearDist = 2.05;
+    // Closer near Earth entry (high progress)
+    const zoomT = smoothstep(0.05, 0.92, t);
+    const camDist = THREE.MathUtils.lerp(farDist, nearDist, zoomT);
+
+    desiredTarget.current.copy(meteorWorld.current);
+
+    // Keep a stable viewing offset; gently blend with current orbit direction
+    const fromTarget = camera.position.clone().sub(controls.target);
+    if (fromTarget.lengthSq() > 1e-6) {
+      viewOffset.current.lerp(fromTarget.normalize(), 0.08);
+      if (viewOffset.current.lengthSq() < 1e-6) {
+        viewOffset.current.set(0.35, 0.55, 1).normalize();
+      } else {
+        viewOffset.current.normalize();
+      }
+    }
+    desiredCam.current
+      .copy(desiredTarget.current)
+      .addScaledVector(viewOffset.current, camDist);
+
+    const alpha = 1 - Math.exp(-4.2 * dt);
+    controls.target.lerp(desiredTarget.current, alpha);
+    camera.position.lerp(desiredCam.current, alpha);
+    controls.update();
+  });
+
+  return null;
+}
+
 function LodController({
   earthPos,
   controlsRef,
   onLodChange,
   blendRef,
+  followActiveRef,
 }: {
   earthPos: THREE.Vector3;
   controlsRef: MutableRefObject<OrbitControlsImpl | null>;
   onLodChange?: Props["onLodChange"];
   blendRef: MutableRefObject<number>;
+  followActiveRef: MutableRefObject<boolean>;
 }) {
   const { camera } = useThree();
   const lastMode = useRef<LodMode | null>(null);
   const lastReport = useRef(0);
 
   useFrame(() => {
-    if (controlsRef.current) {
-      controlsRef.current.target.copy(earthPos);
+    // When not following a meteor, keep orbit target on Earth
+    if (controlsRef.current && !followActiveRef.current) {
+      controlsRef.current.target.lerp(earthPos, 0.12);
     }
     const dist = camera.position.distanceTo(earthPos);
     const blend = smoothstep(LOD_NEAR, LOD_FAR, dist);
@@ -850,6 +953,7 @@ function SceneContent({
   selectedIds,
   primaryId,
   paused,
+  playing,
   progress,
   orbits,
   onLodChange,
@@ -860,6 +964,7 @@ function SceneContent({
   selectedIds: string[];
   primaryId?: string | null;
   paused: boolean;
+  playing: boolean;
   progress: number;
   orbits: Record<string, OrbitElements>;
   onLodChange?: Props["onLodChange"];
@@ -871,9 +976,18 @@ function SceneContent({
     () => tracks.filter((t) => selectedSet.has(t.id)),
     [tracks, selectedSet]
   );
+  const primaryTrack = useMemo(() => {
+    if (!primaryId) return visibleTracks[0] ?? null;
+    return (
+      visibleTracks.find((t) => t.id === primaryId) ??
+      tracks.find((t) => t.id === primaryId) ??
+      null
+    );
+  }, [tracks, visibleTracks, primaryId]);
 
   const earthPos = useMemo(() => earthHeliocentricPosition(), []);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const followActiveRef = useRef(false);
   const [blend, setBlend] = useState(0);
 
   // Mirror blendRef into React state at a low rate for material opacity
@@ -905,6 +1019,15 @@ function SceneContent({
         controlsRef={controlsRef}
         onLodChange={onLodChange}
         blendRef={blendRef}
+        followActiveRef={followActiveRef}
+      />
+      <FollowCamera
+        playing={playing && !paused}
+        progress={progress}
+        primaryTrack={primaryTrack}
+        earthPos={earthPos}
+        controlsRef={controlsRef}
+        followActiveRef={followActiveRef}
       />
 
       {/* Heliocentric solar LOD — fades in as camera pulls away from Earth */}
@@ -1070,7 +1193,7 @@ export default function EarthGlobe({
           </p>
         </div>
         <p className="hidden max-w-[42%] text-right text-[10px] text-slate-500 sm:block">
-          Drag to orbit · continuous zoom · timeline scrubs path
+          Play follows meteor · drag overrides · scroll zooms
         </p>
       </div>
 
@@ -1101,6 +1224,7 @@ export default function EarthGlobe({
               selectedIds={activeIds}
               primaryId={primaryId}
               paused={paused}
+              playing={playing}
               progress={progress}
               orbits={orbits}
               onLodChange={handleLod}

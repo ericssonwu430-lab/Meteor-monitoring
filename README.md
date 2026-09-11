@@ -16,13 +16,15 @@ npm run build && npm start
 - **Sentry risk list** ranked by impact probability (`ip`)
 - **3D Earth globe** with selectable shooting-star trails and full trajectory ribbons
 - **Scrubbable trajectory timeline** (play/pause) shared with Earth and solar views
-- **Earth | Solar system** toggle — solar mode plots Keplerian orbits from JPL SBDB
+- **Continuous zoom** from near-Earth trails to heliocentric SBDB orbits
+- **Play → camera follow + auto-zoom** on the primary meteor (drag overrides; Play resumes)
+- **Timeline dates** in `dd/mm/yy` from Sentry/SBDB + best-effort impact country (not NASA-official)
 - **Origin + brief details** (orbit class, elements, observation arc) from SBDB + Sentry
 - Object detail page with virtual-impactor table
 - Close approaches (CAD, next 60 days, ≤ 0.05 AU)
 - Recent fireballs on a simple SVG world map
 - Auto-refresh every 120s · min-IP filters · dark space theme
-- Mobile-friendly stack, collapsible list, sticky timeline, ≥44px targets
+- Mobile-friendly stack, tabbed panels, single timeline under the globe, ≥44px targets
 
 ## Impact %
 
@@ -46,6 +48,7 @@ Proxied via Next.js route handlers (`revalidate` ~90–300s):
 | `/api/cad` | `cad.api?body=Earth&neo=true&date-min=now&date-max=+60&dist-max=0.05&sort=date` |
 | `/api/fireballs` | `fireball.api?limit=50` |
 | `/api/sbdb/[des]` | `sbdb.api?sstr=` |
+| `/api/geocode` | OpenStreetMap Nominatim reverse (asteroid lat/lon only; cached) |
 
 Attribution: **NASA/JPL Solar System Dynamics** APIs. This app is for education/monitoring — not official emergency alerting.
 

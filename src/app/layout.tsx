@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   title: "Meteor Monitoring · NEO Impact Dashboard",
   description:
     "Live NASA/JPL Sentry impact risks, close approaches, fireballs, and SBDB orbits",
+  referrer: "no-referrer",
 };
 
 export const viewport: Viewport = {
@@ -62,7 +63,7 @@ export default function RootLayout({
             className="text-cyan-400 hover:underline"
             href="https://ssd-api.jpl.nasa.gov/"
             target="_blank"
-            rel="noreferrer"
+            rel="noreferrer noopener"
           >
             NASA/JPL SSD APIs
           </a>
