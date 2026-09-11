@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -16,7 +16,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Meteor Monitoring · NEO Impact Dashboard",
   description:
-    "Live NASA/JPL Sentry impact risks, close approaches, and fireballs",
+    "Live NASA/JPL Sentry impact risks, close approaches, fireballs, and SBDB orbits",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#05080f",
 };
 
 export default function RootLayout({
@@ -29,8 +36,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <header className="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+        <header className="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur pt-[max(0.5rem,env(safe-area-inset-top))]">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
             <Link href="/" className="flex items-center gap-2">
               <span className="text-lg">☄️</span>
               <span className="font-semibold tracking-tight text-slate-100">
@@ -41,12 +48,14 @@ export default function RootLayout({
               </span>
             </Link>
             <p className="text-[11px] text-slate-500">
-              Data: NASA/JPL Sentry · CAD · Fireball
+              NASA/JPL Sentry · CAD · Fireball · SBDB
             </p>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
-        <footer className="mx-auto max-w-6xl border-t border-slate-800/60 px-4 py-6 text-center text-xs text-slate-500">
+        <main className="mx-auto max-w-6xl px-4 py-6 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+          {children}
+        </main>
+        <footer className="mx-auto max-w-6xl border-t border-slate-800/60 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center text-xs text-slate-500">
           Impact % = Sentry <code className="text-slate-400">ip × 100</code>.
           Not a prediction of imminent danger — most listed objects have
           vanishingly small probabilities. Attribution:{" "}

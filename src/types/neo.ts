@@ -126,3 +126,70 @@ export interface Fireball {
   alt: string | null;
   vel: string | null;
 }
+
+/** JPL SBDB orbit element row */
+export interface SbdbElement {
+  name: string;
+  value: string;
+  sigma?: string | null;
+  units?: string | null;
+  title?: string;
+  label?: string;
+}
+
+export interface SbdbOrbitClass {
+  code: string;
+  name: string;
+}
+
+export interface SbdbObject {
+  des: string;
+  fullname?: string;
+  spkid?: string;
+  neo?: boolean;
+  pha?: boolean;
+  orbit_class?: SbdbOrbitClass;
+  kind?: string;
+}
+
+export interface SbdbOrbit {
+  epoch?: string;
+  first_obs?: string;
+  last_obs?: string;
+  data_arc?: string;
+  n_obs_used?: number;
+  moid?: string;
+  condition_code?: string;
+  elements?: SbdbElement[];
+}
+
+export interface SbdbResponse {
+  signature?: { source: string; version: string };
+  object?: SbdbObject;
+  orbit?: SbdbOrbit;
+  phys_par?: unknown[];
+  code?: string;
+  message?: string;
+}
+
+/** Normalized orbital elements for UI / Keplerian viz */
+export interface OrbitElements {
+  a: number | null;
+  e: number | null;
+  i: number | null;
+  om: number | null;
+  w: number | null;
+  ma: number | null;
+  q: number | null;
+  ad: number | null;
+  orbitClass: string | null;
+  orbitClassCode: string | null;
+  designation: string | null;
+  fullname: string | null;
+  firstObs: string | null;
+  lastObs: string | null;
+  dataArc: string | null;
+  moid: string | null;
+  available: boolean;
+  error?: string;
+}

@@ -6,7 +6,9 @@ import { formatImpactPercent } from "@/lib/format";
 type Props = {
   risks: RiskEvent[];
   selectedIds: Set<string>;
+  primaryId?: string | null;
   onToggle: (id: string) => void;
+  onPrimary?: (id: string) => void;
   onSelectAll: () => void;
   onClear: () => void;
   className?: string;
@@ -25,7 +27,9 @@ function displayName(r: RiskEvent): string {
 export default function MeteorPicker({
   risks,
   selectedIds,
+  primaryId,
   onToggle,
+  onPrimary,
   onSelectAll,
   onClear,
   className,
@@ -50,21 +54,21 @@ export default function MeteorPicker({
             <button
               type="button"
               onClick={onSelectAll}
-              className="rounded border border-slate-600 px-2 py-1 text-[10px] font-medium text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
+              className="min-h-11 rounded-lg border border-slate-600 px-3 text-xs font-medium text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
             >
               Select all
             </button>
             <button
               type="button"
               onClick={onClear}
-              className="rounded border border-slate-600 px-2 py-1 text-[10px] font-medium text-slate-300 hover:border-amber-600 hover:text-amber-300"
+              className="min-h-11 rounded-lg border border-slate-600 px-3 text-xs font-medium text-slate-300 hover:border-amber-600 hover:text-amber-300"
             >
               Clear
             </button>
           </div>
         </div>
         <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
-          Check meteors to show shooting-star trails on the globe.
+          Check trails on the globe. Tap a name to focus origin details.
         </p>
       </div>
 
@@ -77,48 +81,58 @@ export default function MeteorPicker({
         {risks.map((r) => {
           const id = riskId(r);
           const checked = selectedIds.has(id);
+          const focused = primaryId === id;
           const ip = parseFloat(r.ip) || 0;
           const name = displayName(r);
           return (
             <li key={id}>
-              <label
-                className={`flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 transition-colors ${
-                  checked
-                    ? "bg-cyan-950/50 ring-1 ring-cyan-700/40"
-                    : "hover:bg-slate-900/80"
+              <div
+                className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${
+                  focused
+                    ? "bg-cyan-950/70 ring-1 ring-cyan-500/60"
+                    : checked
+                      ? "bg-cyan-950/40 ring-1 ring-cyan-700/30"
+                      : "hover:bg-slate-900/80"
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => onToggle(id)}
-                  className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/40"
+                  aria-label={`Show ${name} on globe`}
+                  className="h-5 w-5 shrink-0 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/40"
                 />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium text-slate-100">
-                    {name}
-                  </span>
-                  {name !== r.des && (
-                    <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">
-                      {r.des}
-                    </span>
-                  )}
-                </span>
-                <span
-                  className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${
-                    ip >= 0.01
-                      ? "bg-red-950/80 text-red-300"
-                      : ip >= 0.001
-                        ? "bg-orange-950/80 text-orange-300"
-                        : ip >= 0.0001
-                          ? "bg-amber-950/80 text-amber-300"
-                          : "bg-slate-800 text-cyan-300/90"
-                  }`}
-                  title="Impact probability"
+                <button
+                  type="button"
+                  onClick={() => onPrimary?.(id)}
+                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
                 >
-                  {formatImpactPercent(ip)}
-                </span>
-              </label>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium text-slate-100">
+                      {name}
+                    </span>
+                    {name !== r.des && (
+                      <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">
+                        {r.des}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${
+                      ip >= 0.01
+                        ? "bg-red-950/80 text-red-300"
+                        : ip >= 0.001
+                          ? "bg-orange-950/80 text-orange-300"
+                          : ip >= 0.0001
+                            ? "bg-amber-950/80 text-amber-300"
+                            : "bg-slate-800 text-cyan-300/90"
+                    }`}
+                    title="Impact probability"
+                  >
+                    {formatImpactPercent(ip)}
+                  </span>
+                </button>
+              </div>
             </li>
           );
         })}

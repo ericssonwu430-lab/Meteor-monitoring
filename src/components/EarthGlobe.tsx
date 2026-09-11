@@ -13,14 +13,16 @@ import {
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Html,
+  Line,
   OrbitControls,
   Sphere,
   Stars,
   useTexture,
 } from "@react-three/drei";
 import * as THREE from "three";
-import type { Fireball, RiskEvent } from "@/types/neo";
+import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
 import { formatImpactPercent } from "@/lib/format";
+import SolarSystemView from "@/components/SolarSystemView";
 
 const EARTH_RADIUS = 1;
 const MAX_METEORS = 22;
@@ -35,12 +37,21 @@ const EARTH_SPECULAR =
 const EARTH_CLOUDS =
   "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_clouds_1024.png";
 
+export type GlobeViewMode = "earth" | "solar";
+
 type Props = {
   risks: RiskEvent[];
   fireballs: Fireball[];
   /** Ids of meteors whose trails should animate on the globe */
   selectedIds?: string[];
+  primaryId?: string | null;
   className?: string;
+  viewMode?: GlobeViewMode;
+  /** Shared 0..1 scrub progress for trajectory / Keplerian position */
+  progress?: number;
+  playing?: boolean;
+  orbits?: Record<string, OrbitElements>;
+  orbitsLoading?: boolean;
 };
 
 type MeteorTrack = {
@@ -174,6 +185,86 @@ function bezierTangent(
   return out.normalize();
 }
 
+function sampleBezier(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, n = 56): THREE.Vector3[] {
+  const pts: THREE.Vector3[] = [];
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i <= n; i++) {
+    bezierPoint(a, b, c, i / n, tmp);
+    pts.push(tmp.clone());
+  }
+  return pts;
+}
+
+function TrajectoryRibbon({
+  track,
+  progress,
+  highlighted,
+}: {
+  track: MeteorTrack;
+  progress: number;
+  highlighted: boolean;
+}) {
+  const fullPts = useMemo(
+    () => sampleBezier(track.start, track.mid, track.end, 56),
+    [track]
+  );
+  const traveled = useMemo(() => {
+    const t = Math.min(1, Math.max(0, progress));
+    const n = Math.max(2, Math.floor(t * (fullPts.length - 1)) + 1);
+    return fullPts.slice(0, n);
+  }, [fullPts, progress]);
+
+  const tube = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3(fullPts);
+    return new THREE.TubeGeometry(curve, 48, highlighted ? 0.016 : 0.01, 6, false);
+  }, [fullPts, highlighted]);
+
+  useEffect(() => () => tube.dispose(), [tube]);
+
+  return (
+    <group>
+      <mesh geometry={tube}>
+        <meshBasicMaterial
+          color={highlighted ? "#fb923c" : "#64748b"}
+          transparent
+          opacity={highlighted ? 0.38 : 0.22}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <Line
+        points={traveled}
+        color={highlighted ? "#fdba74" : "#94a3b8"}
+        lineWidth={highlighted ? 2.6 : 1.6}
+        transparent
+        opacity={0.95}
+        depthWrite={false}
+      />
+    </group>
+  );
+}
+
+function ImpactMark({ end, highlighted }: { end: THREE.Vector3; highlighted: boolean }) {
+  const quat = useMemo(() => {
+    const q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), end.clone().normalize());
+    return q;
+  }, [end]);
+  return (
+    <mesh position={end} quaternion={quat}>
+      <ringGeometry args={highlighted ? [0.028, 0.048, 24] : [0.02, 0.034, 20]} />
+      <meshBasicMaterial
+        color={highlighted ? "#f87171" : "#fb923c"}
+        transparent
+        opacity={highlighted ? 0.85 : 0.45}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
 function useEarthSpin(autoRotate: boolean) {
   const earthRef = useRef<THREE.Mesh>(null);
   const cloudRef = useRef<THREE.Mesh>(null);
@@ -280,19 +371,20 @@ function EarthWithFallback({ autoRotate }: { autoRotate: boolean }) {
 /** Realistic shooting-star: elongated glowing head + tapered multi-layer trail + sparks */
 function Meteor({
   track,
-  paused,
+  progress,
+  highlighted,
 }: {
   track: MeteorTrack;
-  paused: boolean;
+  progress: number;
+  highlighted: boolean;
 }) {
   const headRef = useRef<THREE.Group>(null);
   const coreTrailRef = useRef<THREE.Line>(null);
   const glowTrailRef = useRef<THREE.Line>(null);
   const sparksRef = useRef<THREE.Points>(null);
-  const tRef = useRef(track.phase);
   const pos = useRef(new THREE.Vector3());
   const dir = useRef(new THREE.Vector3(0, 1, 0));
-  const trailPts = useRef<THREE.Vector3[]>([]);
+  const tmp = useRef(new THREE.Vector3());
   const [hovered, setHovered] = useState(false);
   const quat = useMemo(() => new THREE.Quaternion(), []);
   const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
@@ -378,29 +470,22 @@ function Meteor({
   }, [coreLine, glowLine, coreGeom, glowGeom, sparkGeom, sparkMat]);
 
   useFrame((_, dt) => {
-    if (paused) return;
-    tRef.current = (tRef.current + dt * track.speed * 0.16) % 1;
-    const t = tRef.current;
+    const t = Math.min(1, Math.max(0, progress));
     bezierPoint(track.start, track.mid, track.end, t, pos.current);
     bezierTangent(track.start, track.mid, track.end, t, dir.current);
 
     // Brighten near atmosphere entry
     const entryBoost = t > 0.55 ? 0.6 + (t - 0.55) * 1.8 : 0.45;
     const fadeOut = t > 0.92 ? 1 - (t - 0.92) / 0.08 : 1;
+    const sizeBoost = highlighted ? 1.2 : 1;
 
     if (headRef.current) {
       headRef.current.position.copy(pos.current);
       quat.setFromUnitVectors(up, dir.current);
       headRef.current.quaternion.copy(quat);
-      const s = (hovered ? track.size * 1.35 : track.size) * fadeOut;
+      const s = (hovered ? track.size * 1.35 : track.size) * fadeOut * sizeBoost;
       headRef.current.scale.setScalar(s / 0.03);
       headRef.current.visible = fadeOut > 0.05;
-    }
-
-    // Motion-blur streak: denser samples along recent path
-    trailPts.current.push(pos.current.clone());
-    if (trailPts.current.length > TRAIL_SEGMENTS) {
-      trailPts.current.shift();
     }
 
     const writeTrail = (
@@ -409,11 +494,11 @@ function Meteor({
       baseOpacity: number
     ) => {
       const attr = geom.getAttribute("position") as THREE.BufferAttribute;
-      const n = trailPts.current.length;
+      const trailLen = highlighted ? 0.16 : 0.12;
       for (let i = 0; i < TRAIL_SEGMENTS; i++) {
-        const idx = Math.max(0, n - TRAIL_SEGMENTS + i);
-        const p = trailPts.current[idx] ?? pos.current;
-        attr.setXYZ(i, p.x, p.y, p.z);
+        const tt = Math.max(0, t - trailLen * (1 - i / Math.max(1, TRAIL_SEGMENTS - 1)));
+        bezierPoint(track.start, track.mid, track.end, tt, tmp.current);
+        attr.setXYZ(i, tmp.current.x, tmp.current.y, tmp.current.z);
       }
       attr.needsUpdate = true;
       mat.opacity = baseOpacity * entryBoost * fadeOut;
@@ -426,17 +511,14 @@ function Meteor({
     if (sparksRef.current) {
       const attr = sparkGeom.getAttribute("position") as THREE.BufferAttribute;
       const ages = sparkGeom.getAttribute("age") as THREE.BufferAttribute;
+      const trailLen = highlighted ? 0.16 : 0.12;
       for (let i = 0; i < SPARK_COUNT; i++) {
         let age = ages.getX(i) + dt * (1.8 + (i % 3) * 0.4);
         if (age > 1) age = age % 1;
         ages.setX(i, age);
-        const back = Math.min(
-          trailPts.current.length - 1,
-          2 + Math.floor(age * 10)
-        );
-        const base =
-          trailPts.current[Math.max(0, trailPts.current.length - 1 - back)] ??
-          pos.current;
+        const backT = Math.max(0, t - trailLen * age);
+        bezierPoint(track.start, track.mid, track.end, backT, tmp.current);
+        const base = tmp.current;
         const jitter = 0.012 * (1 - age);
         const seed = hashString(track.id + String(i));
         attr.setXYZ(
@@ -654,12 +736,20 @@ function SceneContent({
   risks,
   fireballs,
   selectedIds,
+  primaryId,
   paused,
+  viewMode,
+  progress,
+  orbits,
 }: {
   risks: RiskEvent[];
   fireballs: Fireball[];
   selectedIds: string[];
+  primaryId?: string | null;
   paused: boolean;
+  viewMode: GlobeViewMode;
+  progress: number;
+  orbits: Record<string, OrbitElements>;
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const tracks = useMemo(() => buildTracks(risks), [risks]);
@@ -668,39 +758,69 @@ function SceneContent({
     [tracks, selectedSet]
   );
 
+  const solar = viewMode === "solar";
+
   return (
     <>
-      <color attach="background" args={["#020617"]} />
-      <ambientLight intensity={0.35} />
-      <directionalLight position={[5, 3, 5]} intensity={1.35} color="#fff6e8" />
-      <directionalLight
-        position={[-4, -2, -3]}
-        intensity={0.25}
-        color="#93c5fd"
-      />
       <Stars
-        radius={80}
+        radius={solar ? 120 : 80}
         depth={50}
-        count={3200}
+        count={solar ? 4200 : 3200}
         factor={3.2}
         saturation={0}
         fade
         speed={paused ? 0 : 0.4}
       />
-      <EarthWithFallback autoRotate={!paused} />
-      {visibleTracks.map((t) => (
-        <Meteor key={t.id} track={t} paused={paused} />
-      ))}
-      <FireballImpacts fireballs={fireballs} paused={paused} />
+      {solar ? (
+        <SolarSystemView
+          risks={risks}
+          selectedIds={selectedIds}
+          primaryId={primaryId}
+          progress={progress}
+          orbits={orbits}
+        />
+      ) : (
+        <>
+          <color attach="background" args={["#020617"]} />
+          <ambientLight intensity={0.35} />
+          <directionalLight position={[5, 3, 5]} intensity={1.35} color="#fff6e8" />
+          <directionalLight
+            position={[-4, -2, -3]}
+            intensity={0.25}
+            color="#93c5fd"
+          />
+          <EarthWithFallback autoRotate={!paused} />
+          {visibleTracks.map((t) => (
+            <group key={t.id}>
+              <TrajectoryRibbon
+                track={t}
+                progress={progress}
+                highlighted={t.id === primaryId}
+              />
+              <ImpactMark end={t.end} highlighted={t.id === primaryId} />
+              <Meteor
+                track={t}
+                progress={progress}
+                highlighted={t.id === primaryId}
+              />
+            </group>
+          ))}
+          <FireballImpacts fireballs={fireballs} paused={paused} />
+        </>
+      )}
       <OrbitControls
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
-        minDistance={1.8}
-        maxDistance={6}
+        minDistance={solar ? 4 : 1.8}
+        maxDistance={solar ? 48 : 6}
         autoRotate={false}
         rotateSpeed={0.55}
         zoomSpeed={0.7}
+        touches={{
+          ONE: THREE.TOUCH.ROTATE,
+          TWO: THREE.TOUCH.DOLLY_PAN,
+        }}
       />
     </>
   );
@@ -710,12 +830,19 @@ export default function EarthGlobe({
   risks,
   fireballs,
   selectedIds,
+  primaryId,
   className,
+  viewMode = "earth",
+  progress = 0,
+  playing = false,
+  orbits = {},
+  orbitsLoading = false,
 }: Props) {
   const [paused, setPaused] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const activeIds = selectedIds ?? [];
+  const solar = viewMode === "solar";
 
   useEffect(() => {
     setMounted(true);
@@ -734,11 +861,16 @@ export default function EarthGlobe({
     (f) => f.lat != null && f.lon != null
   ).length;
 
+  const keplerCount = activeIds.reduce((n, id) => {
+    const r = risks.find((x) => (x.id || x.des) === id);
+    return n + (r && orbits[r.des]?.available ? 1 : 0);
+  }, 0);
+
   if (!mounted) {
     return (
       <div
         className={`flex items-center justify-center rounded-xl border border-slate-700 bg-slate-950 ${className ?? ""}`}
-        style={{ minHeight: 420 }}
+        style={{ minHeight: 360 }}
       >
         <p className="text-sm text-slate-500">Initializing 3D globe…</p>
       </div>
@@ -752,20 +884,31 @@ export default function EarthGlobe({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 bg-gradient-to-b from-slate-950/90 to-transparent px-3 py-2 sm:px-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
-            Live 3D Earth
+            {solar ? "Solar system" : "Live 3D Earth"}
           </p>
           <p className="text-xs text-slate-400">
-            Selected meteors as shooting stars · subtle fireball flashes
+            {solar
+              ? "Keplerian orbits from JPL SBDB · Earth for scale"
+              : "Trajectory ribbons · shooting stars · fireball flashes"}
           </p>
         </div>
-        <p className="hidden text-[10px] text-slate-500 sm:block">
-          Drag to orbit · scroll to zoom · pick meteors in the list
+        <p className="hidden max-w-[40%] text-right text-[10px] text-slate-500 sm:block">
+          Drag to orbit · pinch/scroll to zoom · timeline scrubs path
         </p>
       </div>
 
-      <div className="h-[min(62vh,560px)] w-full min-h-[360px] touch-none">
+      <div
+        className="h-[min(58vh,520px)] w-full min-h-[300px] touch-none overscroll-none sm:min-h-[360px]"
+        style={{ touchAction: "none" }}
+      >
         <Canvas
-          camera={{ position: [0, 0.6, 3.2], fov: 42, near: 0.1, far: 200 }}
+          key={viewMode}
+          camera={{
+            position: solar ? [0, 6, 14] : [0, 0.6, 3.2],
+            fov: 42,
+            near: 0.1,
+            far: 400,
+          }}
           dpr={[1, 1.75]}
           onCreated={onCreated}
           gl={{
@@ -773,13 +916,18 @@ export default function EarthGlobe({
             alpha: false,
             powerPreference: "high-performance",
           }}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <Suspense fallback={null}>
             <SceneContent
               risks={risks}
               fireballs={fireballs}
               selectedIds={activeIds}
+              primaryId={primaryId}
               paused={paused}
+              viewMode={viewMode}
+              progress={progress}
+              orbits={orbits}
             />
           </Suspense>
         </Canvas>
@@ -787,11 +935,13 @@ export default function EarthGlobe({
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 px-3 py-2 text-[11px] text-slate-500">
         <span>
-          {activeIds.length} shooting star
-          {activeIds.length === 1 ? "" : "s"} · {fbCount} fireball flashes
+          {solar
+            ? `${keplerCount}/${activeIds.length} Keplerian orbit${keplerCount === 1 ? "" : "s"} from SBDB`
+            : `${activeIds.length} ribbon${activeIds.length === 1 ? "" : "s"} · ${fbCount} fireball flashes`}
+          {solar && orbitsLoading ? " · loading SBDB…" : ""}
         </span>
         <span className="text-slate-600">
-          {paused ? "Paused (tab hidden)" : "Animating"}
+          {paused ? "Paused (tab hidden)" : playing ? "Playing" : "Scrub or play"}
         </span>
       </div>
     </div>

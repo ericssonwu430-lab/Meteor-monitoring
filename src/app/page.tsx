@@ -83,17 +83,26 @@ export default function DashboardPage() {
               Auto-refreshes every 2 minutes.
             </p>
           </div>
-          <div className="text-right text-xs text-slate-500">
-            {updatedAt && (
-              <p>Updated {updatedAt.toLocaleTimeString()}</p>
-            )}
+          <div className="text-left text-xs text-slate-400 sm:text-right">
+            <p className="text-sm text-slate-200">
+              Data as of{" "}
+              <span className="font-semibold text-cyan-300">
+                {updatedAt
+                  ? updatedAt.toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })
+                  : "—"}
+              </span>
+            </p>
+            <p className="mt-0.5">Auto-refreshes every 2 minutes</p>
             <button
               type="button"
               onClick={() => {
-                setLoading(true);
+                if (risks.length === 0) setLoading(true);
                 load();
               }}
-              className="mt-1 rounded border border-slate-700 px-2 py-1 text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
+              className="mt-2 min-h-11 rounded-lg border border-slate-700 px-3 text-sm text-slate-300 hover:border-cyan-600 hover:text-cyan-300"
             >
               Refresh now
             </button>
@@ -110,7 +119,7 @@ export default function DashboardPage() {
 
       {loading && risks.length === 0 && (
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-12 text-center text-slate-400">
-          Loading Sentry / CAD / Fireball data…
+          Loading Sentry / CAD / Fireball / SBDB data…
         </div>
       )}
 
@@ -120,10 +129,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!loading && !error && (
+      {risks.length > 0 && (
         <>
           <section>
-            <GlobeSection risks={globeRisks} fireballs={fireballs} />
+            <GlobeSection
+              risks={globeRisks}
+              fireballs={fireballs}
+              updatedAt={updatedAt}
+            />
           </section>
 
           {top && (

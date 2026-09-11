@@ -44,3 +44,50 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/* Large, finger-friendly trajectory scrubber */
+input[type="range"].traj-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 44px;
+  width: 100%;
+  margin: 0;
+}
+
+input[type="range"].traj-range:focus {
+  outline: none;
+}
+
+input[type="range"].traj-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #1e293b;
+}
+
+input[type="range"].traj-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -10px;
+  border-radius: 999px;
+  background: #22d3ee;
+  border: 2px solid #ecfeff;
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.28);
+}
+
+input[type="range"].traj-range::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #1e293b;
+}
+
+input[type="range"].traj-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #ecfeff;
+  border-radius: 999px;
+  background: #22d3ee;
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.28);
+}

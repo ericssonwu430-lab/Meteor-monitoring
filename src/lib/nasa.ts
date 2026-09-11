@@ -3,6 +3,9 @@ import type {
   CloseApproach,
   Fireball,
   FireballResponse,
+  OrbitElements,
+  SbdbElement,
+  SbdbResponse,
   SentryDetailResponse,
   SentryListResponse,
 } from "@/types/neo";
@@ -10,11 +13,12 @@ import type {
 const SENTRY_URL = "https://ssd-api.jpl.nasa.gov/sentry.api";
 const CAD_URL = "https://ssd-api.jpl.nasa.gov/cad.api";
 const FIREBALL_URL = "https://ssd-api.jpl.nasa.gov/fireball.api";
+const SBDB_URL = "https://ssd-api.jpl.nasa.gov/sbdb.api";
 
-async function jplFetch<T>(url: string): Promise<T> {
+async function jplFetch<T>(url: string, revalidate = 90): Promise<T> {
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
-    next: { revalidate: 90 },
+    next: { revalidate },
   });
   if (!res.ok) {
     throw new Error(`JPL API ${res.status}: ${url}`);
@@ -45,12 +49,73 @@ export async function fetchCad(): Promise<CadResponse> {
   return jplFetch<CadResponse>(`${CAD_URL}?${params}`);
 }
 
-export async function fetchFireballs(
-  limit = 50
-): Promise<FireballResponse> {
-  return jplFetch<FireballResponse>(
-    `${FIREBALL_URL}?limit=${limit}`
+export async function fetchFireballs(limit = 50): Promise<FireballResponse> {
+  return jplFetch<FireballResponse>(`${FIREBALL_URL}?limit=${limit}`);
+}
+
+export async function fetchSbdb(des: string): Promise<SbdbResponse> {
+  const q = encodeURIComponent(des);
+  return jplFetch<SbdbResponse>(
+    `${SBDB_URL}?sstr=${q}&phys-par=true`,
+    300
   );
+}
+
+function elemMap(elements: SbdbElement[] | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!elements) return out;
+  for (const el of elements) {
+    const n = parseFloat(el.value);
+    if (Number.isFinite(n)) out[el.name] = n;
+  }
+  return out;
+}
+
+export function parseOrbitElements(res: SbdbResponse): OrbitElements {
+  if (res.code || !res.object || !res.orbit) {
+    return {
+      a: null,
+      e: null,
+      i: null,
+      om: null,
+      w: null,
+      ma: null,
+      q: null,
+      ad: null,
+      orbitClass: null,
+      orbitClassCode: null,
+      designation: null,
+      fullname: null,
+      firstObs: null,
+      lastObs: null,
+      dataArc: null,
+      moid: null,
+      available: false,
+      error: res.message || res.code || "SBDB data unavailable",
+    };
+  }
+  const m = elemMap(res.orbit.elements);
+  const hasCore = m.a != null && m.e != null;
+  return {
+    a: m.a ?? null,
+    e: m.e ?? null,
+    i: m.i ?? null,
+    om: m.om ?? null,
+    w: m.w ?? null,
+    ma: m.ma ?? null,
+    q: m.q ?? null,
+    ad: m.ad ?? null,
+    orbitClass: res.object.orbit_class?.name ?? null,
+    orbitClassCode: res.object.orbit_class?.code ?? null,
+    designation: res.object.des ?? null,
+    fullname: res.object.fullname ?? null,
+    firstObs: res.orbit.first_obs ?? null,
+    lastObs: res.orbit.last_obs ?? null,
+    dataArc: res.orbit.data_arc ?? null,
+    moid: res.orbit.moid ?? null,
+    available: hasCore,
+    error: hasCore ? undefined : "Incomplete orbital elements from SBDB",
+  };
 }
 
 export function parseCadRows(res: CadResponse): CloseApproach[] {
