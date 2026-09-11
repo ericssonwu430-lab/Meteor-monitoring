@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { SentryDetailResponse, VirtualImpactor } from "@/types/neo";
-import InfoTip from "@/components/InfoTip";
+import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 import {
@@ -13,6 +13,14 @@ import {
   formatPalermo,
   torinoColor,
 } from "@/lib/format";
+
+function displayStat(v: unknown): string {
+  if (v == null || v === "") return "—";
+  if (typeof v === "number" && Number.isNaN(v)) return "—";
+  const s = String(v);
+  if (s === "NaN" || s.toLowerCase() === "nan") return "—";
+  return s;
+}
 
 export default function ObjectDetailPage() {
   const params = useParams();
@@ -100,7 +108,9 @@ export default function ObjectDetailPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
               <p className="text-[10px] uppercase text-slate-500">
-                {LABELS.impactProbability}
+                <LabelWithInfo tip={TIPS.impactProbability} tipLabel={`About ${LABELS.impactProbability}`}>
+                  {LABELS.impactProbability}
+                </LabelWithInfo>
               </p>
               <p className="mt-1 font-mono text-3xl font-bold text-amber-300">
                 {formatImpactPercent(summary.ip)}
@@ -108,7 +118,9 @@ export default function ObjectDetailPage() {
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
               <p className="text-[10px] uppercase text-slate-500">
-                Virtual impactors
+                <LabelWithInfo tip={TIPS.virtualImpactors} tipLabel={`About ${LABELS.virtualImpactors}`}>
+                  {LABELS.virtualImpactors}
+                </LabelWithInfo>
               </p>
               <p className="mt-1 text-3xl font-bold text-slate-100">
                 {summary.n_imp}
@@ -116,7 +128,9 @@ export default function ObjectDetailPage() {
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
               <p className="text-[10px] uppercase text-slate-500">
-                Impact energy (Mt TNT)
+                <LabelWithInfo tip={TIPS.impactEnergy} tipLabel={`About ${LABELS.impactEnergy}`}>
+                  {LABELS.impactEnergy}
+                </LabelWithInfo>
               </p>
               <p className="mt-1 font-mono text-xl font-semibold text-slate-100">
                 {summary.energy ?? "—"}
@@ -125,26 +139,34 @@ export default function ObjectDetailPage() {
           </div>
 
           <dl className="grid gap-2 rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm sm:grid-cols-2">
-            {[
-              ["v_inf (km/s)", summary.v_inf],
-              ["v_imp (km/s)", summary.v_imp],
-              ["Mass (kg)", summary.mass],
-              ["First obs", summary.first_obs],
-              ["Last obs", summary.last_obs],
-              ["Observations", summary.nobs],
-              ["Method", summary.method],
-              ["Arc", summary.darc],
-            ].map(([k, v]) => (
-              <div key={String(k)} className="flex justify-between gap-2 border-b border-slate-800/80 py-1">
-                <dt className="text-slate-500">{k}</dt>
-                <dd className="font-mono text-slate-200">{v ?? "—"}</dd>
+            {(
+              [
+                { label: LABELS.vInf, tip: TIPS.vInf, value: summary.v_inf },
+                { label: LABELS.vImp, tip: TIPS.vImp, value: summary.v_imp },
+                { label: LABELS.mass, tip: TIPS.mass, value: summary.mass },
+                { label: LABELS.firstObs, tip: TIPS.firstObs, value: summary.first_obs },
+                { label: LABELS.lastObs, tip: TIPS.lastObs, value: summary.last_obs },
+                { label: LABELS.observations, tip: TIPS.observations, value: summary.nobs },
+                { label: LABELS.method, tip: TIPS.method, value: summary.method },
+                { label: LABELS.dataArc, tip: TIPS.dataArc, value: summary.darc },
+              ] as const
+            ).map(({ label, tip, value }) => (
+              <div key={label} className="flex justify-between gap-2 border-b border-slate-800/80 py-1">
+                <dt>
+                  <LabelWithInfo tip={tip} tipLabel={`About ${label}`} className="text-slate-500">
+                    {label}
+                  </LabelWithInfo>
+                </dt>
+                <dd className="font-mono text-slate-200">{displayStat(value)}</dd>
               </div>
             ))}
           </dl>
 
           <section>
             <h2 className="mb-3 text-sm font-semibold text-slate-200">
-              Virtual impactors
+              <LabelWithInfo tip={TIPS.virtualImpactors} tipLabel={`About ${LABELS.virtualImpactors}`}>
+                {LABELS.virtualImpactors}
+              </LabelWithInfo>
             </h2>
             <div className="overflow-x-auto rounded-xl border border-slate-700">
               <table className="w-full min-w-[640px] text-left text-sm">
@@ -154,8 +176,8 @@ export default function ObjectDetailPage() {
                     <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.impactProbability}<InfoTip text={TIPS.impactProbability} label={`About ${LABELS.impactProbability}`} /></span></th>
                     <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.palermo}<InfoTip text={TIPS.palermo} label={`About ${LABELS.palermo}`} /></span></th>
                     <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.torino}<InfoTip text={TIPS.torino} label={`About ${LABELS.torino}`} /></span></th>
-                    <th className="px-3 py-2">Energy</th>
-                    <th className="px-3 py-2">σ VI</th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.impactEnergy}<InfoTip text={TIPS.impactEnergy} label={`About ${LABELS.impactEnergy}`} /></span></th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.sigmaVi}<InfoTip text={TIPS.sigmaVi} label={`About ${LABELS.sigmaVi}`} /></span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">

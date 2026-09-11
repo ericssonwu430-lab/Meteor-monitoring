@@ -16,8 +16,24 @@ export const TIPS = {
     "Count of possible impact solutions in Sentry’s model — not confirmed hits.",
   lastObs:
     "Date of the most recent observation used in the orbit. Fresher data usually means a better orbit.",
+  firstObs:
+    "Date of the earliest observation used in the orbit. Together with Last obs it defines the observation arc.",
   vInf:
     "Speed relative to Earth if it arrived from infinity (km/s) — how fast it would approach.",
+  vImp:
+    "Impact speed at Earth (km/s) — how fast it would hit if it reached the surface.",
+  mass:
+    "Estimated mass of the object in kilograms. Often derived from size and assumed density.",
+  observations:
+    "Number of observations (nobs) used to fit the orbit.",
+  method:
+    "Orbit determination method used by Sentry (for example IOBS).",
+  dataArc:
+    "Length of the observation arc (days from first to last observation). Longer arcs usually mean a better-known orbit.",
+  sigmaVi:
+    "Sentry: how many sigma the virtual-impactor solution is from the nominal orbit — larger means farther from the best-fit path.",
+  impactEnergy:
+    "Estimated impact energy in megatons of TNT equivalent.",
   originOrbit:
     "Dynamical orbit class from JPL SBDB (how it moves around the Sun) — not a physical birthplace on a map.",
   minImpactProb:
