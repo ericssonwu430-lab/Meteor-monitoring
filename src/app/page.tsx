@@ -1,22 +1,13 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ImpactCard from "@/components/ImpactCard";
 import FireballMap from "@/components/FireballMap";
 import Timeline from "@/components/Timeline";
 import Filters from "@/components/Filters";
+import GlobeSection from "@/components/GlobeSection";
 import type { CloseApproach, Fireball, RiskEvent } from "@/types/neo";
 import { formatImpactPercent } from "@/lib/format";
-
-const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[min(62vh,560px)] min-h-[360px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950">
-      <p className="text-sm text-slate-500">Loading 3D globe…</p>
-    </div>
-  ),
-});
 
 const REFRESH_MS = 120_000;
 const GLOBE_RISKS = 20;
@@ -132,7 +123,7 @@ export default function DashboardPage() {
       {!loading && !error && (
         <>
           <section>
-            <EarthGlobe risks={globeRisks} fireballs={fireballs} />
+            <GlobeSection risks={globeRisks} fireballs={fireballs} />
           </section>
 
           {top && (

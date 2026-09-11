@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Html,
   OrbitControls,
@@ -25,7 +25,8 @@ import { formatImpactPercent } from "@/lib/format";
 const EARTH_RADIUS = 1;
 const MAX_METEORS = 22;
 const MAX_FIREBALLS = 40;
-const MAX_TRAILS = 18;
+const TRAIL_SEGMENTS = 28;
+const SPARK_COUNT = 8;
 
 const EARTH_DIFFUSE =
   "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg";
@@ -37,6 +38,8 @@ const EARTH_CLOUDS =
 type Props = {
   risks: RiskEvent[];
   fireballs: Fireball[];
+  /** Ids of meteors whose trails should animate on the globe */
+  selectedIds?: string[];
   className?: string;
 };
 
@@ -51,7 +54,6 @@ type MeteorTrack = {
   end: THREE.Vector3;
   speed: number;
   size: number;
-  color: string;
   phase: number;
 };
 
@@ -92,11 +94,10 @@ function latLonToVec3(lat: number, lon: number, radius: number): THREE.Vector3 {
   return new THREE.Vector3(x, y, z);
 }
 
-function ipColor(ip: number): string {
-  if (ip >= 0.01) return "#f87171";
-  if (ip >= 0.001) return "#fb923c";
-  if (ip >= 0.0001) return "#fbbf24";
-  return "#67e8f9";
+function displayName(r: RiskEvent): string {
+  const full = (r.fullname || "").trim();
+  if (full && full !== r.des) return full;
+  return r.des || r.id || "Unknown";
 }
 
 function buildTracks(risks: RiskEvent[]): MeteorTrack[] {
@@ -125,12 +126,12 @@ function buildTracks(risks: RiskEvent[]): MeteorTrack[] {
       .lerp(end, 0.45)
       .add(tangent.clone().multiplyScalar(0.35))
       .add(approachDir.clone().multiplyScalar(0.15));
-    const size = 0.018 + Math.min(0.05, Math.log10(ip * 1e6 + 1) * 0.012);
-    const speed = 0.12 + Math.min(0.35, ip * 40) + seededUnit(seed, 8) * 0.08;
+    const size = 0.022 + Math.min(0.055, Math.log10(ip * 1e6 + 1) * 0.014);
+    const speed = 0.14 + Math.min(0.4, ip * 45) + seededUnit(seed, 8) * 0.1;
     return {
       id: r.id || r.des,
       des: r.des,
-      label: r.des,
+      label: displayName(r),
       ip,
       ipLabel: formatImpactPercent(ip),
       start,
@@ -138,7 +139,6 @@ function buildTracks(risks: RiskEvent[]): MeteorTrack[] {
       end,
       speed,
       size,
-      color: ipColor(ip),
       phase: seededUnit(seed, 9),
     };
   });
@@ -157,6 +157,21 @@ function bezierPoint(
   out.addScaledVector(b, 2 * u * t);
   out.addScaledVector(c, t * t);
   return out;
+}
+
+function bezierTangent(
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  c: THREE.Vector3,
+  t: number,
+  out: THREE.Vector3
+) {
+  // derivative of quadratic bezier
+  out.set(0, 0, 0);
+  out.addScaledVector(a, 2 * (t - 1));
+  out.addScaledVector(b, 2 - 4 * t);
+  out.addScaledVector(c, 2 * t);
+  return out.normalize();
 }
 
 function useEarthSpin(autoRotate: boolean) {
@@ -262,83 +277,192 @@ function EarthWithFallback({ autoRotate }: { autoRotate: boolean }) {
   );
 }
 
+/** Realistic shooting-star: elongated glowing head + tapered multi-layer trail + sparks */
 function Meteor({
   track,
-  selected,
-  onSelect,
   paused,
 }: {
   track: MeteorTrack;
-  selected: boolean;
-  onSelect: (id: string | null) => void;
   paused: boolean;
 }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const trailRef = useRef<THREE.Line>(null);
+  const headRef = useRef<THREE.Group>(null);
+  const coreTrailRef = useRef<THREE.Line>(null);
+  const glowTrailRef = useRef<THREE.Line>(null);
+  const sparksRef = useRef<THREE.Points>(null);
   const tRef = useRef(track.phase);
   const pos = useRef(new THREE.Vector3());
+  const dir = useRef(new THREE.Vector3(0, 1, 0));
   const trailPts = useRef<THREE.Vector3[]>([]);
   const [hovered, setHovered] = useState(false);
+  const quat = useMemo(() => new THREE.Quaternion(), []);
+  const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
 
-  const geometry = useMemo(() => {
+  const coreGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
-    const arr = new Float32Array(12 * 3);
-    g.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+    g.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(TRAIL_SEGMENTS * 3), 3)
+    );
     return g;
   }, []);
 
-  const lineObj = useMemo(() => {
+  const glowGeom = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(TRAIL_SEGMENTS * 3), 3)
+    );
+    return g;
+  }, []);
+
+  const sparkGeom = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(SPARK_COUNT * 3), 3)
+    );
+    const ages = new Float32Array(SPARK_COUNT);
+    for (let i = 0; i < SPARK_COUNT; i++) ages[i] = Math.random();
+    g.setAttribute("age", new THREE.BufferAttribute(ages, 1));
+    return g;
+  }, []);
+
+  const coreLine = useMemo(() => {
     const mat = new THREE.LineBasicMaterial({
-      color: track.color,
+      color: "#fff7ed",
       transparent: true,
-      opacity: 0.45,
+      opacity: 0.95,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      linewidth: 1,
     });
-    return new THREE.Line(geometry, mat);
-  }, [geometry, track.color]);
+    return new THREE.Line(coreGeom, mat);
+  }, [coreGeom]);
+
+  const glowLine = useMemo(() => {
+    const mat = new THREE.LineBasicMaterial({
+      color: "#fb923c",
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    return new THREE.Line(glowGeom, mat);
+  }, [glowGeom]);
+
+  const sparkMat = useMemo(
+    () =>
+      new THREE.PointsMaterial({
+        color: "#fdba74",
+        size: 0.028,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true,
+      }),
+    []
+  );
 
   useEffect(() => {
-    trailRef.current = lineObj;
+    coreTrailRef.current = coreLine;
+    glowTrailRef.current = glowLine;
     return () => {
-      geometry.dispose();
-      (lineObj.material as THREE.Material).dispose();
+      coreGeom.dispose();
+      glowGeom.dispose();
+      sparkGeom.dispose();
+      (coreLine.material as THREE.Material).dispose();
+      (glowLine.material as THREE.Material).dispose();
+      sparkMat.dispose();
     };
-  }, [lineObj, geometry]);
+  }, [coreLine, glowLine, coreGeom, glowGeom, sparkGeom, sparkMat]);
 
   useFrame((_, dt) => {
     if (paused) return;
-    tRef.current = (tRef.current + dt * track.speed * 0.15) % 1;
+    tRef.current = (tRef.current + dt * track.speed * 0.16) % 1;
     const t = tRef.current;
     bezierPoint(track.start, track.mid, track.end, t, pos.current);
-    if (groupRef.current) {
-      groupRef.current.position.copy(pos.current);
-      const s = selected || hovered ? track.size * 1.85 : track.size;
-      groupRef.current.scale.setScalar(s / 0.03);
+    bezierTangent(track.start, track.mid, track.end, t, dir.current);
+
+    // Brighten near atmosphere entry
+    const entryBoost = t > 0.55 ? 0.6 + (t - 0.55) * 1.8 : 0.45;
+    const fadeOut = t > 0.92 ? 1 - (t - 0.92) / 0.08 : 1;
+
+    if (headRef.current) {
+      headRef.current.position.copy(pos.current);
+      quat.setFromUnitVectors(up, dir.current);
+      headRef.current.quaternion.copy(quat);
+      const s = (hovered ? track.size * 1.35 : track.size) * fadeOut;
+      headRef.current.scale.setScalar(s / 0.03);
+      headRef.current.visible = fadeOut > 0.05;
     }
 
+    // Motion-blur streak: denser samples along recent path
     trailPts.current.push(pos.current.clone());
-    if (trailPts.current.length > 14) trailPts.current.shift();
-    const attr = geometry.getAttribute("position") as THREE.BufferAttribute;
-    for (let i = 0; i < 12; i++) {
-      const p = trailPts.current[Math.max(0, trailPts.current.length - 12 + i)];
-      if (p) attr.setXYZ(i, p.x, p.y, p.z);
+    if (trailPts.current.length > TRAIL_SEGMENTS) {
+      trailPts.current.shift();
     }
-    attr.needsUpdate = true;
-    const mat = lineObj.material as THREE.LineBasicMaterial;
-    mat.opacity = selected || hovered ? 0.9 : 0.45;
+
+    const writeTrail = (
+      geom: THREE.BufferGeometry,
+      mat: THREE.LineBasicMaterial,
+      baseOpacity: number
+    ) => {
+      const attr = geom.getAttribute("position") as THREE.BufferAttribute;
+      const n = trailPts.current.length;
+      for (let i = 0; i < TRAIL_SEGMENTS; i++) {
+        const idx = Math.max(0, n - TRAIL_SEGMENTS + i);
+        const p = trailPts.current[idx] ?? pos.current;
+        attr.setXYZ(i, p.x, p.y, p.z);
+      }
+      attr.needsUpdate = true;
+      mat.opacity = baseOpacity * entryBoost * fadeOut;
+    };
+
+    writeTrail(coreGeom, coreLine.material as THREE.LineBasicMaterial, 0.95);
+    writeTrail(glowGeom, glowLine.material as THREE.LineBasicMaterial, 0.5);
+
+    // Brief spark particles trailing behind the head
+    if (sparksRef.current) {
+      const attr = sparkGeom.getAttribute("position") as THREE.BufferAttribute;
+      const ages = sparkGeom.getAttribute("age") as THREE.BufferAttribute;
+      for (let i = 0; i < SPARK_COUNT; i++) {
+        let age = ages.getX(i) + dt * (1.8 + (i % 3) * 0.4);
+        if (age > 1) age = age % 1;
+        ages.setX(i, age);
+        const back = Math.min(
+          trailPts.current.length - 1,
+          2 + Math.floor(age * 10)
+        );
+        const base =
+          trailPts.current[Math.max(0, trailPts.current.length - 1 - back)] ??
+          pos.current;
+        const jitter = 0.012 * (1 - age);
+        const seed = hashString(track.id + String(i));
+        attr.setXYZ(
+          i,
+          base.x + (seededUnit(seed, 1) - 0.5) * jitter * 2,
+          base.y + (seededUnit(seed, 2) - 0.5) * jitter * 2,
+          base.z + (seededUnit(seed, 3) - 0.5) * jitter * 2
+        );
+      }
+      attr.needsUpdate = true;
+      ages.needsUpdate = true;
+      sparkMat.opacity = 0.7 * entryBoost * fadeOut * (hovered ? 1 : 0.85);
+      sparksRef.current.visible = fadeOut > 0.08;
+    }
   });
 
-  const showLabel = selected || hovered || track.ip >= 0.001;
+  const headScale = track.size;
 
   return (
     <group>
-      <primitive object={lineObj} />
+      <primitive object={glowLine} />
+      <primitive object={coreLine} />
+      <points ref={sparksRef} geometry={sparkGeom} material={sparkMat} />
+
       <group
-        ref={groupRef}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelect(selected ? null : track.id);
-        }}
+        ref={headRef}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
@@ -349,44 +473,97 @@ function Meteor({
           document.body.style.cursor = "auto";
         }}
       >
+        {/* Outer orange/red glow shell */}
         <mesh>
-          <sphereGeometry args={[0.03, 12, 12]} />
-          <meshBasicMaterial color={track.color} toneMapped={false} />
+          <sphereGeometry args={[0.055, 16, 16]} />
+          <meshBasicMaterial
+            color="#ef4444"
+            transparent
+            opacity={0.22}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        {/* Mid orange glow */}
+        <mesh>
+          <sphereGeometry args={[0.038, 14, 14]} />
+          <meshBasicMaterial
+            color="#fb923c"
+            transparent
+            opacity={0.45}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        {/* Hot white/yellow core */}
+        <mesh>
+          <sphereGeometry args={[0.018, 12, 12]} />
+          <meshBasicMaterial
+            color="#fffbeb"
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        {/* Elongated fireball / tapered cone pointing opposite travel (trail side) */}
+        <mesh rotation={[Math.PI, 0, 0]} position={[0, -0.04, 0]}>
+          <coneGeometry args={[0.028, 0.11, 10, 1, true]} />
+          <meshBasicMaterial
+            color="#f97316"
+            transparent
+            opacity={0.55}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        {/* Inner luminous taper */}
+        <mesh rotation={[Math.PI, 0, 0]} position={[0, -0.03, 0]}>
+          <coneGeometry args={[0.012, 0.08, 8, 1, true]} />
+          <meshBasicMaterial
+            color="#fef08a"
+            transparent
+            opacity={0.75}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
         </mesh>
         <pointLight
-          color={track.color}
-          intensity={selected || hovered ? 1.2 : 0.45}
-          distance={0.85}
+          color="#fdba74"
+          intensity={hovered ? 2.2 : 1.35}
+          distance={1.1}
+          decay={2}
         />
-        {showLabel && (
-          <Html
-            center
-            distanceFactor={7}
-            style={{ pointerEvents: "none" }}
-            zIndexRange={[100, 0]}
+        <Html
+          center
+          distanceFactor={7}
+          style={{ pointerEvents: "none" }}
+          zIndexRange={[100, 0]}
+        >
+          <div
+            className={`-translate-y-6 whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] shadow-lg backdrop-blur-sm transition-opacity ${
+              hovered
+                ? "border-amber-400/80 bg-slate-950/90 text-amber-200 opacity-100"
+                : "border-slate-600/60 bg-slate-950/70 text-slate-200 opacity-80"
+            }`}
           >
-            <div
-              className={`-translate-y-5 whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] shadow-lg backdrop-blur-sm ${
-                selected || hovered
-                  ? "scale-110 border-amber-400/80 bg-slate-950/90 text-amber-200"
-                  : "border-slate-600/70 bg-slate-950/75 text-slate-200"
-              }`}
-            >
-              <span className="font-semibold text-cyan-200">{track.label}</span>
-              <span className="mx-1 text-slate-500">·</span>
-              <span
-                className={
-                  selected || hovered
-                    ? "text-sm font-bold text-amber-300"
-                    : "text-amber-300/90"
-                }
-              >
-                {track.ipLabel}
-              </span>
-            </div>
-          </Html>
-        )}
+            <span className="font-semibold text-cyan-200">{track.label}</span>
+            <span className="mx-1 text-slate-500">·</span>
+            <span className="font-bold text-amber-300">{track.ipLabel}</span>
+          </div>
+        </Html>
       </group>
+      {/* invisible hit target sized for readability */}
+      <mesh visible={false} scale={headScale / 0.03}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+      </mesh>
     </group>
   );
 }
@@ -409,7 +586,7 @@ function FireballFlash({
     const pulse = t < 0.25 ? Math.sin((t / 0.25) * Math.PI) : 0;
     ref.current.scale.setScalar(0.001 + pulse * size * 8);
     const mat = ref.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = pulse * 0.9;
+    mat.opacity = pulse * 0.55;
   });
   return (
     <mesh ref={ref} position={pos}>
@@ -420,6 +597,7 @@ function FireballFlash({
         opacity={0}
         depthWrite={false}
         toneMapped={false}
+        blending={THREE.AdditiveBlending}
       />
     </mesh>
   );
@@ -460,7 +638,13 @@ function FireballImpacts({
   return (
     <group>
       {points.map((p) => (
-        <FireballFlash key={p.id} pos={p.pos} size={p.size} phase={p.phase} paused={paused} />
+        <FireballFlash
+          key={p.id}
+          pos={p.pos}
+          size={p.size}
+          phase={p.phase}
+          paused={paused}
+        />
       ))}
     </group>
   );
@@ -469,24 +653,20 @@ function FireballImpacts({
 function SceneContent({
   risks,
   fireballs,
+  selectedIds,
   paused,
 }: {
   risks: RiskEvent[];
   fireballs: Fireball[];
+  selectedIds: string[];
   paused: boolean;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const tracks = useMemo(
-    () => buildTracks(risks).slice(0, MAX_TRAILS),
-    [risks]
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const tracks = useMemo(() => buildTracks(risks), [risks]);
+  const visibleTracks = useMemo(
+    () => tracks.filter((t) => selectedSet.has(t.id)),
+    [tracks, selectedSet]
   );
-  const { gl } = useThree();
-
-  useEffect(() => {
-    const onMiss = () => setSelected(null);
-    gl.domElement.addEventListener("pointermissed", onMiss);
-    return () => gl.domElement.removeEventListener("pointermissed", onMiss);
-  }, [gl]);
 
   return (
     <>
@@ -507,15 +687,9 @@ function SceneContent({
         fade
         speed={paused ? 0 : 0.4}
       />
-      <EarthWithFallback autoRotate={!paused && !selected} />
-      {tracks.map((t) => (
-        <Meteor
-          key={t.id}
-          track={t}
-          selected={selected === t.id}
-          onSelect={setSelected}
-          paused={paused}
-        />
+      <EarthWithFallback autoRotate={!paused} />
+      {visibleTracks.map((t) => (
+        <Meteor key={t.id} track={t} paused={paused} />
       ))}
       <FireballImpacts fireballs={fireballs} paused={paused} />
       <OrbitControls
@@ -532,9 +706,16 @@ function SceneContent({
   );
 }
 
-export default function EarthGlobe({ risks, fireballs, className }: Props) {
+export default function EarthGlobe({
+  risks,
+  fireballs,
+  selectedIds,
+  className,
+}: Props) {
   const [paused, setPaused] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  const activeIds = selectedIds ?? [];
 
   useEffect(() => {
     setMounted(true);
@@ -549,7 +730,6 @@ export default function EarthGlobe({ risks, fireballs, className }: Props) {
     gl.outputColorSpace = THREE.SRGBColorSpace;
   }, []);
 
-  const trailCount = Math.min(risks.length, MAX_TRAILS);
   const fbCount = fireballs.filter(
     (f) => f.lat != null && f.lon != null
   ).length;
@@ -575,11 +755,11 @@ export default function EarthGlobe({ risks, fireballs, className }: Props) {
             Live 3D Earth
           </p>
           <p className="text-xs text-slate-400">
-            Sentry risk meteors · impact % · recent fireball flashes
+            Selected meteors as shooting stars · subtle fireball flashes
           </p>
         </div>
         <p className="hidden text-[10px] text-slate-500 sm:block">
-          Drag to orbit · scroll to zoom · click a meteor
+          Drag to orbit · scroll to zoom · pick meteors in the list
         </p>
       </div>
 
@@ -598,6 +778,7 @@ export default function EarthGlobe({ risks, fireballs, className }: Props) {
             <SceneContent
               risks={risks}
               fireballs={fireballs}
+              selectedIds={activeIds}
               paused={paused}
             />
           </Suspense>
@@ -606,7 +787,8 @@ export default function EarthGlobe({ risks, fireballs, className }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 px-3 py-2 text-[11px] text-slate-500">
         <span>
-          {trailCount} meteor trails · {fbCount} fireballs
+          {activeIds.length} shooting star
+          {activeIds.length === 1 ? "" : "s"} · {fbCount} fireball flashes
         </span>
         <span className="text-slate-600">
           {paused ? "Paused (tab hidden)" : "Animating"}
