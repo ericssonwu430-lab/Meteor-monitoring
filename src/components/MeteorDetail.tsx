@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { OrbitElements, RiskEvent } from "@/types/neo";
 import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 import {
   formatDiameterKm,
   formatImpactPercent,
@@ -156,25 +157,25 @@ export default function MeteorDetail({
         <div className="flex flex-wrap gap-1.5">
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-950/80 px-2 py-0.5 font-mono font-semibold text-amber-300">
             {formatImpactPercent(ip)}
-            <InfoTip text={TIPS.impactProbability} label="About impact probability" />
+            <InfoTip text={TIPS.impactProbability} label={`About ${LABELS.impactProbability}`} />
           </span>
           <span
             className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${torinoColor(risk.ts_max)}`}
           >
-            Torino {risk.ts_max ?? "0"}
-            <InfoTip text={TIPS.torino} label="About Torino scale" />
+            {LABELS.torino} {risk.ts_max ?? "0"}
+            <InfoTip text={TIPS.torino} label={`About ${LABELS.torino}`} />
           </span>
           <span className="inline-flex items-center gap-1 rounded bg-indigo-900/80 px-1.5 py-0.5 text-indigo-200">
-            Palermo {formatPalermo(risk.ps_max)}
-            <InfoTip text={TIPS.palermo} label="About Palermo scale" />
+            {LABELS.palermo} {formatPalermo(risk.ps_max)}
+            <InfoTip text={TIPS.palermo} label={`About ${LABELS.palermo}`} />
           </span>
           <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">
-            Ø {formatDiameterKm(risk.diameter)}
-            <InfoTip text={TIPS.diameter} label="About diameter" />
+            {LABELS.diameter} {formatDiameterKm(risk.diameter)}
+            <InfoTip text={TIPS.diameter} label={`About ${LABELS.diameter}`} />
           </span>
           <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">
-            H={risk.h}
-            <InfoTip text={TIPS.absoluteMagnitude} label="About H magnitude" />
+            {LABELS.absoluteMagnitude}={risk.h}
+            <InfoTip text={TIPS.absoluteMagnitude} label={`About ${LABELS.absoluteMagnitude}`} />
           </span>
         </div>
 
@@ -182,7 +183,7 @@ export default function MeteorDetail({
           <div>
             <dt>
               <LabelWithInfo tip={TIPS.viYears} className="text-slate-500">
-                VI years
+                {LABELS.viYears}
               </LabelWithInfo>
             </dt>
             <dd className="font-mono text-slate-200">{risk.range || "—"}</dd>
@@ -190,7 +191,7 @@ export default function MeteorDetail({
           <div>
             <dt>
               <LabelWithInfo tip={TIPS.lastObs} className="text-slate-500">
-                Last obs
+                {LABELS.lastObs}
               </LabelWithInfo>
             </dt>
             <dd className="font-mono text-slate-200">{risk.last_obs || "—"}</dd>
@@ -198,7 +199,7 @@ export default function MeteorDetail({
           <div>
             <dt>
               <LabelWithInfo tip={TIPS.vInf} className="text-slate-500">
-                v∞
+                {LABELS.vInf}
               </LabelWithInfo>
             </dt>
             <dd className="font-mono text-slate-200">
@@ -208,7 +209,7 @@ export default function MeteorDetail({
           <div>
             <dt>
               <LabelWithInfo tip={TIPS.virtualImpactors} className="text-slate-500">
-                VIs
+                {LABELS.virtualImpactors}
               </LabelWithInfo>
             </dt>
             <dd className="font-mono text-slate-200">{risk.n_imp}</dd>
@@ -220,59 +221,59 @@ export default function MeteorDetail({
             tip={TIPS.originOrbit}
             className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/90"
           >
-            Origin (orbit / SBDB)
+            {LABELS.originOrbit}
           </LabelWithInfo>
           {loading && (
-            <p className="mt-1 text-[11px] text-slate-500">Loading SBDB…</p>
+            <p className="mt-1 text-[11px] text-slate-500">Loading {LABELS.sbdb}…</p>
           )}
           {!loading && orbit && !orbit.available && (
             <p className="mt-1 text-[11px] text-amber-200/80">
-              SBDB orbit unavailable{orbit.error ? `: ${orbit.error}` : ""}.
-              Sentry fields above still apply.
+              {LABELS.sbdb} orbit unavailable{orbit.error ? `: ${orbit.error}` : ""}.
+              {LABELS.sentry} fields above still apply.
             </p>
           )}
           {!loading && orbit?.available && (
             <dl className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
               <div className="col-span-2">
-                <dt><LabelWithInfo tip={TIPS.originOrbit} className="text-slate-500">Orbit class</LabelWithInfo></dt>
+                <dt><LabelWithInfo tip={TIPS.originOrbit} className="text-slate-500">{LABELS.orbitClass}</LabelWithInfo></dt>
                 <dd className="font-medium text-violet-200">
                   {orbit.orbitClass}
                   {orbit.orbitClassCode ? ` (${orbit.orbitClassCode})` : ""}
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip={TIPS.semiMajor} className="text-slate-500">a (AU)</LabelWithInfo></dt>
+                <dt><LabelWithInfo tip={TIPS.semiMajor} className="text-slate-500">{LABELS.semiMajor}</LabelWithInfo></dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.a?.toPrecision(4) ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip={TIPS.eccentricity} className="text-slate-500">e</LabelWithInfo></dt>
+                <dt><LabelWithInfo tip={TIPS.eccentricity} className="text-slate-500">{LABELS.eccentricity}</LabelWithInfo></dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.e?.toPrecision(4) ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip={TIPS.inclination} className="text-slate-500">i (°)</LabelWithInfo></dt>
+                <dt><LabelWithInfo tip={TIPS.inclination} className="text-slate-500">{LABELS.inclination}</LabelWithInfo></dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.i?.toPrecision(3) ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip={TIPS.semiMajor} className="text-slate-500">q / Q (AU)</LabelWithInfo></dt>
+                <dt><LabelWithInfo tip={TIPS.semiMajor} className="text-slate-500">{LABELS.periAp}</LabelWithInfo></dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.q?.toPrecision(3) ?? "—"} /{" "}
                   {orbit.ad?.toPrecision(3) ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip={TIPS.lastObs} className="text-slate-500">First obs</LabelWithInfo></dt>
+                <dt><LabelWithInfo tip={TIPS.lastObs} className="text-slate-500">{LABELS.firstObs}</LabelWithInfo></dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.firstObs ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt><LabelWithInfo tip="How many days of observations span the orbit fit — longer arcs are usually more reliable." className="text-slate-500">Arc (d)</LabelWithInfo></dt>
+                <dt><LabelWithInfo tip="How many days of observations span the orbit fit — longer arcs are usually more reliable." className="text-slate-500">{LABELS.dataArc}</LabelWithInfo></dt>
                 <dd className="font-mono text-slate-200">
                   {orbit.dataArc ?? "—"}
                 </dd>

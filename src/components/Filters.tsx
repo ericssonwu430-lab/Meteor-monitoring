@@ -2,6 +2,7 @@
 
 import { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 
 type Props = {
   minIp: number;
@@ -23,7 +24,7 @@ export default function Filters({ minIp, onMinIpChange }: Props) {
         tip={TIPS.minImpactProb}
         className="text-xs uppercase tracking-wider text-slate-400"
       >
-        Min impact prob
+        {LABELS.minImpactProb}
       </LabelWithInfo>
       {PRESETS.map((p) => (
         <button

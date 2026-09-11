@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { SentryDetailResponse, VirtualImpactor } from "@/types/neo";
 import InfoTip from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 import {
   formatDiameterKm,
   formatImpactPercent,
@@ -78,17 +79,20 @@ export default function ObjectDetailPage() {
               <span
                 className={`rounded px-2 py-0.5 font-semibold ${torinoColor(summary.ts_max)}`}
               >
-                Torino {summary.ts_max ?? "0"} <InfoTip text={TIPS.torino} label="About Torino" />
+                <span className="inline-flex items-center gap-1">
+                  {LABELS.torino} {summary.ts_max ?? "0"}
+                  <InfoTip text={TIPS.torino} label={`About ${LABELS.torino}`} />
+                </span>
               </span>
               <span className="rounded bg-indigo-900/80 px-2 py-0.5 text-indigo-200">
-                Palermo max {formatPalermo(summary.ps_max)} · cum{" "}
-                {formatPalermo(summary.ps_cum)}
+                {LABELS.palermoMax} {formatPalermo(summary.ps_max)} ·{" "}
+                {LABELS.palermoCum} {formatPalermo(summary.ps_cum)}
               </span>
               <span className="rounded bg-slate-800 px-2 py-0.5">
-                Ø {formatDiameterKm(summary.diameter)}
+                {LABELS.diameter} {formatDiameterKm(summary.diameter)}
               </span>
               <span className="rounded bg-slate-800 px-2 py-0.5">
-                H={summary.h}
+                {LABELS.absoluteMagnitude}={summary.h}
               </span>
             </div>
           </header>
@@ -96,7 +100,7 @@ export default function ObjectDetailPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
               <p className="text-[10px] uppercase text-slate-500">
-                Cumulative IP
+                {LABELS.impactProbability}
               </p>
               <p className="mt-1 font-mono text-3xl font-bold text-amber-300">
                 {formatImpactPercent(summary.ip)}
@@ -147,9 +151,9 @@ export default function ObjectDetailPage() {
                 <thead className="bg-slate-900 text-xs uppercase text-slate-400">
                   <tr>
                     <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">IP<InfoTip text={TIPS.impactProbability} label="About IP" /></span></th>
-                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">Palermo<InfoTip text={TIPS.palermo} label="About Palermo" /></span></th>
-                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">Torino<InfoTip text={TIPS.torino} label="About Torino" /></span></th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.impactProbability}<InfoTip text={TIPS.impactProbability} label={`About ${LABELS.impactProbability}`} /></span></th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.palermo}<InfoTip text={TIPS.palermo} label={`About ${LABELS.palermo}`} /></span></th>
+                    <th className="px-3 py-2"><span className="inline-flex items-center gap-1">{LABELS.torino}<InfoTip text={TIPS.torino} label={`About ${LABELS.torino}`} /></span></th>
                     <th className="px-3 py-2">Energy</th>
                     <th className="px-3 py-2">σ VI</th>
                   </tr>

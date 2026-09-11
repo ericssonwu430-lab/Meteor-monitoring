@@ -4,6 +4,7 @@ import type { CloseApproach, Fireball } from "@/types/neo";
 import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
 import { formatAu } from "@/lib/format";
+import { LABELS } from "@/lib/labels";
 
 type Props = {
   approaches: CloseApproach[];
@@ -20,7 +21,7 @@ export default function Timeline({ approaches, fireballs }: Props) {
       kind: "cad" as const,
       date: a.cd,
       label: a.des,
-      detail: `${formatAu(a.dist)} · v∞ ${parseFloat(a.v_inf).toFixed(1)} km/s`,
+      detail: `${formatAu(a.dist)} · Approach Speed v∞ ${parseFloat(a.v_inf).toFixed(1)} km/s`,
     })),
     ...fireballs.slice(0, 40).map((f) => ({
       kind: "fireball" as const,
@@ -89,10 +90,14 @@ export default function Timeline({ approaches, fireballs }: Props) {
                   : "bg-amber-950 text-amber-300"
               }`}
             >
-              {item.kind === "cad" ? "CAD" : "FB"}
+              {item.kind === "cad" ? LABELS.cad : LABELS.fireballs}
               <InfoTip
                 text={item.kind === "cad" ? TIPS.closeApproach : TIPS.fireballs}
-                label={item.kind === "cad" ? "About CAD" : "About fireballs"}
+                label={
+                  item.kind === "cad"
+                    ? `About ${LABELS.cad}`
+                    : `About ${LABELS.fireballs}`
+                }
               />
             </span>
           </li>

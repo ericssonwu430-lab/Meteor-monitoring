@@ -17,6 +17,7 @@ import DataFreshness from "@/components/DataFreshness";
 import ImpactCard from "@/components/ImpactCard";
 import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 import Filters from "@/components/Filters";
 import FireballMap from "@/components/FireballMap";
 import Timeline from "@/components/Timeline";
@@ -499,8 +500,8 @@ export default function GlobeSection({
                 <p className="text-[10px] leading-relaxed text-slate-500">
                   Sorted by discovery (newest first). Objects that appear after a
                   refresh show{" "}
-                  <span className="font-semibold text-lime-400">[NEW]</span> for{" "}
-                  {newBadgeHours}h on this device only.
+                  <span className="font-semibold text-lime-400">{LABELS.newBadge}</span>{" "}
+                  for {newBadgeHours}h on this device only.
                 </p>
                 <MeteorPicker
                   newIds={newIds}
@@ -539,7 +540,7 @@ export default function GlobeSection({
                     </div>
                     {cardRisks.length > 30 && (
                       <p className="mt-2 text-center text-xs text-slate-500">
-                        Showing top 30. Raise min IP in filters to focus.
+                        Showing top 30. Raise the Minimum Impact Probability (Min IP) filter to focus.
                       </p>
                     )}
                   </div>
@@ -564,13 +565,13 @@ export default function GlobeSection({
                     <ImpactCard event={top} rank={1} isNew={newIds?.has(riskId(top)) ?? false} hero />
                     <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
                       <p className="text-xs uppercase text-slate-500">
-                        Highest IP (filtered)
+                        Highest Impact Probability (IP) — filtered
                       </p>
                       <p className="mt-1 font-mono text-3xl font-bold text-amber-300">
                         {formatImpactPercent(top.ip)}
                       </p>
                       <p className="mt-2 text-sm text-slate-300">
-                        {top.fullname || top.des} · VI years {top.range}
+                        {top.fullname || top.des} · Virtual Impactor Years (VI years) {top.range}
                       </p>
                     </div>
                   </div>
@@ -626,8 +627,8 @@ export default function GlobeSection({
                     </button>
                   )}
                   <p className="text-xs text-slate-500">
-                    Auto-refresh every 2 minutes · NASA/JPL Sentry · CAD ·
-                    Fireball · SBDB
+                    Auto-refresh every 2 minutes · NASA/JPL {LABELS.sentry} ·{" "}
+                    {LABELS.cad} · {LABELS.fireballs} · {LABELS.sbdb}
                   </p>
                 </div>
                 <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">
@@ -639,7 +640,8 @@ export default function GlobeSection({
                 <p className="text-xs leading-relaxed text-slate-400">
                   Zoom the 3D view continuously: close in for atmospheric
                   meteor trails on Earth; pull out for the Sun, Earth&apos;s
-                  orbit, and selected NEO heliocentric paths from SBDB. Use the
+                  orbit, and selected Near-Earth Object (NEO) Sun-centered paths from the
+                  Small-Body Database (SBDB). Use the
                   thin timeline under the globe to scrub trajectories.
                 </p>
                 <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">

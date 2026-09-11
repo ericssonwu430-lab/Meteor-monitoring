@@ -3,6 +3,7 @@
 import type { Fireball } from "@/types/neo";
 import { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 
 type Props = {
   fireballs: Fireball[];
@@ -27,7 +28,7 @@ export default function FireballMap({ fireballs }: Props) {
     <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
       <div className="border-b border-slate-800 px-3 py-2 text-xs uppercase tracking-wider text-slate-400">
         <LabelWithInfo tip={TIPS.fireballs} className="text-xs uppercase tracking-wider text-slate-400">
-          Recent fireballs (lat/lon)
+          {LABELS.fireballsMap}
         </LabelWithInfo>
       </div>
       <svg

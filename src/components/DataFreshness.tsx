@@ -2,6 +2,7 @@
 
 import { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 
 type Props = {
   updatedAt: Date | null;
@@ -35,8 +36,9 @@ export default function DataFreshness({ updatedAt, className }: Props) {
         </span>
       </p>
       <p className="mt-0.5 text-xs text-slate-400">
-        Auto-refreshes every 2 minutes from NASA/JPL Sentry, CAD, Fireball, and
-        SBDB. Impact estimates can change when new observations arrive.
+        Auto-refreshes every 2 minutes from NASA/JPL{" "}
+        {LABELS.sentry}, {LABELS.cad}, {LABELS.fireballs}, and {LABELS.sbdb}.
+        Impact estimates can change when new observations arrive.
       </p>
     </div>
   );

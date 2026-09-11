@@ -3,6 +3,7 @@
 import type { RiskEvent } from "@/types/neo";
 import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 import { formatImpactPercent } from "@/lib/format";
 
 type Props = {
@@ -76,8 +77,8 @@ export default function MeteorPicker({
         </div>
         <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
           Check trails on the globe. Tap a name to focus origin details.{" "}
-          <span className="text-lime-400/90">[NEW]</span> marks objects that
-          appeared after a refresh (kept ~24h on this device).
+          <span className="text-lime-400/90">{LABELS.newBadge}</span> marks
+          objects that appeared after a refresh (kept ~24h on this device).
         </p>
       </div>
 
@@ -123,9 +124,9 @@ export default function MeteorPicker({
                         {name}
                       </span>
                       {isNew && (
-                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-lime-500/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-lime-300 ring-1 ring-lime-400/40">
-                          NEW
-                          <InfoTip text={TIPS.newBadge} label="About NEW" />
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-lime-500/20 px-1 py-0.5 text-[9px] font-bold tracking-wide text-lime-300 ring-1 ring-lime-400/40">
+                          {LABELS.newBadge}
+                          <InfoTip text={TIPS.newBadge} label={`About ${LABELS.newBadge}`} />
                         </span>
                       )}
                     </span>

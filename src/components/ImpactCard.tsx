@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { RiskEvent } from "@/types/neo";
 import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 import {
   formatDiameterKm,
   formatImpactPercent,
@@ -42,15 +43,15 @@ export default function ImpactCard({ event, rank, hero, isNew }: Props) {
               <InfoTip text={TIPS.designation} label="About this name" />
               {isNew && (
                 <span className="inline-flex items-center gap-1 rounded bg-lime-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-lime-300 ring-1 ring-lime-400/40">
-                  NEW
+                  {LABELS.newBadge}
                   <InfoTip text={TIPS.newBadge} label="About NEW" />
                 </span>
               )}
             </h3>
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            Potential impacts {event.range} · {event.n_imp} VI
-            {event.n_imp === 1 ? "" : "s"}
+            Possible hit windows {event.range} · {event.n_imp}{" "}
+            {LABELS.virtualImpactors}
           </p>
         </div>
         <div className="text-right">
@@ -65,7 +66,7 @@ export default function ImpactCard({ event, rank, hero, isNew }: Props) {
             tip={TIPS.impactProbability}
             className="justify-end text-[10px] uppercase tracking-wide text-slate-500"
           >
-            impact probability
+            {LABELS.impactProbability}
           </LabelWithInfo>
         </div>
       </div>
@@ -74,20 +75,23 @@ export default function ImpactCard({ event, rank, hero, isNew }: Props) {
         <span
           className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-semibold ${torinoColor(ts)}`}
         >
-          Torino {ts ?? "0"}
-          <InfoTip text={TIPS.torino} label="About Torino scale" />
+          {LABELS.torino} {ts ?? "0"}
+          <InfoTip text={TIPS.torino} label={`About ${LABELS.torino}`} />
         </span>
         <span className="inline-flex items-center gap-1 rounded bg-indigo-900/80 px-2 py-0.5 text-indigo-200">
-          Palermo {formatPalermo(event.ps_max)}
-          <InfoTip text={TIPS.palermo} label="About Palermo scale" />
+          {LABELS.palermo} {formatPalermo(event.ps_max)}
+          <InfoTip text={TIPS.palermo} label={`About ${LABELS.palermo}`} />
         </span>
         <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-slate-300">
-          Ø {formatDiameterKm(event.diameter)}
-          <InfoTip text={TIPS.diameter} label="About diameter" />
+          {LABELS.diameter} {formatDiameterKm(event.diameter)}
+          <InfoTip text={TIPS.diameter} label={`About ${LABELS.diameter}`} />
         </span>
         <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-slate-300">
-          H={event.h}
-          <InfoTip text={TIPS.absoluteMagnitude} label="About H magnitude" />
+          {LABELS.absoluteMagnitude}={event.h}
+          <InfoTip
+            text={TIPS.absoluteMagnitude}
+            label={`About ${LABELS.absoluteMagnitude}`}
+          />
         </span>
       </div>
     </Link>

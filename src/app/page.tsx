@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import GlobeSection from "@/components/GlobeSection";
 import { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import { LABELS } from "@/lib/labels";
 import type { CloseApproach, Fireball, RiskEvent } from "@/types/neo";
 import {
   NEW_BADGE_RETENTION_MS,
@@ -108,7 +109,7 @@ export default function DashboardPage() {
             tip={TIPS.neoMonitor}
             className="font-semibold text-slate-100"
           >
-            NEO monitor
+            {LABELS.neoMonitor}
           </LabelWithInfo>
           <span className="mx-2 text-slate-600">·</span>
           <span className="inline-flex items-center gap-1 text-xs text-slate-400">
@@ -140,7 +141,7 @@ export default function DashboardPage() {
 
       {loading && risks.length === 0 && (
         <div className="mx-auto max-w-6xl rounded-xl border border-slate-800 bg-slate-900/50 p-12 text-center text-slate-400">
-          Loading Sentry / CAD / Fireball / SBDB data…
+          {LABELS.loadingFeeds}
         </div>
       )}
 
