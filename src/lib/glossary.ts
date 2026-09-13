@@ -75,9 +75,13 @@ export const TIPS = {
   neoMonitor:
     "Live near-Earth object risk dashboard fed by public NASA/JPL sources.",
   liveSky:
-    "Where the object is in Earth's sky right now from JPL Horizons — geocentric apparent RA/Dec, distance, and V magnitude. Not a predicted impact site or country.",
+    "Where the object is in Earth's sky right now from JPL Horizons — geocentric apparent RA/Dec, distance (km + AU), light-travel time, and V magnitude. Alt/Az needs an observer site, so we show Earth-centered Horizons like JPL instead of visitor GPS. Not a predicted impact site or country.",
   horizons:
-    "NASA/JPL Horizons computes precise positions of solar-system bodies. This app requests an Earth-centered (geocentric) observer table. Visitor location is never used.",
+    "NASA/JPL Horizons computes precise positions of solar-system bodies. This app requests an Earth-centered (geocentric) observer table (CENTER=500@399). Alt/Az would need your location — we never ask for it.",
+  distanceAu:
+    "Geocentric range in astronomical units (Horizons delta). 1 AU ≈ 149,597,870.7 km.",
+  lightTravel:
+    "How long light takes to travel the current geocentric range (distance / speed of light).",
   apparentCoords:
     "Apparent right ascension and declination as seen from Earth's center (light-time included). These are sky coordinates, not a ground track or impact country.",
   constellation:

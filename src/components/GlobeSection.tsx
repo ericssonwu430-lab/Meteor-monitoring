@@ -31,6 +31,80 @@ import {
 import { useEnrichedFireballs } from "@/lib/useEnrichedFireballs";
 import InfoTip from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
+import {
+  formatDecDms,
+  formatRaHms,
+  AU_KM,
+  C_KM_S,
+} from "@/lib/horizons";
+
+/** Poll primary object only — respect Horizons rate limits. */
+const EPHEMERIS_POLL_MS = 45_000;
+const INTERP_TICK_MS = 250;
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Shortest-path lerp on RA hours (0–24 wrap). */
+function lerpRaHours(a: number, b: number, t: number): number {
+  let d = b - a;
+  if (d > 12) d -= 24;
+  if (d < -12) d += 24;
+  return ((a + d * t) % 24 + 24) % 24;
+}
+
+type TimedEphemeris = HorizonsEphemeris & { fetchedAt: number };
+
+/**
+ * Linearly interpolate (mild extrapolate) between two poll samples using
+ * client fetch times so distance/RA/Dec tick smoothly between ~45s polls.
+ */
+function interpolateEphemeris(
+  from: TimedEphemeris,
+  to: TimedEphemeris,
+  nowMs: number
+): HorizonsEphemeris {
+  const t0 = from.fetchedAt;
+  const t1 = to.fetchedAt;
+  if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 === t0) {
+    return to;
+  }
+  const span = t1 - t0;
+  // Cap extrapolation so we don't drift far before the next Horizons poll
+  const blend = Math.min(1.2, Math.max(0, (nowMs - t0) / span));
+
+  const raHours =
+    from.raHours != null && to.raHours != null
+      ? lerpRaHours(from.raHours, to.raHours, blend)
+      : to.raHours;
+  const decDeg =
+    from.decDeg != null && to.decDeg != null
+      ? lerp(from.decDeg, to.decDeg, blend)
+      : to.decDeg;
+  const deltaAu = lerp(from.deltaAu, to.deltaAu, blend);
+  const distanceKm = deltaAu * AU_KM;
+  const lightTravelSeconds = distanceKm / C_KM_S;
+  const magnitude =
+    from.magnitude != null && to.magnitude != null
+      ? lerp(from.magnitude, to.magnitude, Math.min(1, blend))
+      : to.magnitude;
+
+  return {
+    ...to,
+    deltaAu,
+    distanceKm,
+    lightTravelSeconds,
+    raHours,
+    decDeg,
+    ra: raHours != null ? formatRaHms(raHours) : to.ra,
+    dec: decDeg != null ? formatDecDms(decDeg) : to.dec,
+    magnitude,
+    // Keep Horizons sample time — "Updated Xs ago" reflects last poll/asOf
+    asOf: to.asOf,
+  };
+}
+
 
 const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
   ssr: false,
@@ -120,6 +194,8 @@ export default function GlobeSection({
     null
   );
   const sentryCache = useRef<Record<string, SentryDetailResponse>>({});
+  const [ephemerisRaw, setEphemerisRaw] = useState<TimedEphemeris | null>(null);
+  const ephemerisPrevRef = useRef<TimedEphemeris | null>(null);
   const [ephemeris, setEphemeris] = useState<HorizonsEphemeris | null>(null);
   const [ephemerisLoading, setEphemerisLoading] = useState(false);
   const [ephemerisError, setEphemerisError] = useState<string | null>(null);
@@ -267,10 +343,12 @@ export default function GlobeSection({
     };
   }, [primaryRisk?.des]);
 
-  // Live geocentric sky position from JPL Horizons — refresh on focused meteor.
+  // Live geocentric sky from JPL Horizons — primary object only, ~45s poll.
   useEffect(() => {
     if (!primaryRisk?.des) {
       setEphemeris(null);
+      setEphemerisRaw(null);
+      ephemerisPrevRef.current = null;
       setEphemerisError(null);
       setEphemerisLoading(false);
       return;
@@ -278,16 +356,30 @@ export default function GlobeSection({
     const des = primaryRisk.des;
     let cancelled = false;
     setEphemeris(null);
+    setEphemerisRaw(null);
+    ephemerisPrevRef.current = null;
     setEphemerisError(null);
     setEphemerisLoading(true);
-    const load = async () => {
-      setEphemerisLoading(true);
+
+    const load = async (bust: boolean) => {
+      if (bust) {
+        // Keep showing last sample while refreshing
+      } else {
+        setEphemerisLoading(true);
+      }
       try {
-        const res = await fetch(`/api/ephemeris/${encodeURIComponent(des)}`);
+        const q = bust ? `?_=${Date.now()}&live=1` : "?live=1";
+        const res = await fetch(
+          `/api/ephemeris/${encodeURIComponent(des)}${q}`
+        );
         const json = await res.json();
         if (cancelled) return;
         if (!res.ok || json.error || json.distanceKm == null) {
-          setEphemeris(null);
+          if (!bust) {
+            setEphemeris(null);
+            setEphemerisRaw(null);
+            ephemerisPrevRef.current = null;
+          }
           setEphemerisError(
             typeof json.error === "string"
               ? json.error
@@ -295,24 +387,56 @@ export default function GlobeSection({
           );
           return;
         }
-        setEphemeris(json as HorizonsEphemeris);
+        const next: TimedEphemeris = {
+          ...(json as HorizonsEphemeris),
+          fetchedAt: Date.now(),
+        };
+        setEphemerisRaw((prev) => {
+          if (prev) {
+            ephemerisPrevRef.current = prev;
+          }
+          return next;
+        });
         setEphemerisError(null);
       } catch {
-        if (!cancelled) {
+        if (!cancelled && !bust) {
           setEphemeris(null);
+          setEphemerisRaw(null);
+          ephemerisPrevRef.current = null;
           setEphemerisError("Horizons fetch failed");
         }
       } finally {
         if (!cancelled) setEphemerisLoading(false);
       }
     };
-    load();
-    const id = window.setInterval(load, 15 * 60 * 1000);
+
+    load(false);
+    const id = window.setInterval(() => load(true), EPHEMERIS_POLL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
   }, [primaryRisk?.des]);
+
+  // Smooth TheSkyLive-like ticking between Horizons polls (still Horizons-based).
+  useEffect(() => {
+    if (!ephemerisRaw) {
+      setEphemeris(null);
+      return;
+    }
+    const tick = () => {
+      const now = Date.now();
+      const prev = ephemerisPrevRef.current;
+      if (prev) {
+        setEphemeris(interpolateEphemeris(prev, ephemerisRaw, now));
+      } else {
+        setEphemeris(ephemerisRaw);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, INTERP_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [ephemerisRaw]);
 
   const timelineDates = useMemo(
     () =>

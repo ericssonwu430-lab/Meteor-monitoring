@@ -7,8 +7,11 @@ import { constellationFromRaDec } from "@/lib/constellation";
 import type { HorizonsEphemeris } from "@/types/neo";
 
 export const AU_KM = 149597870.7;
+/** Speed of light in km/s (exact IAU value used for light-travel time). */
+export const C_KM_S = 299792.458;
 export const HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api";
-export const HORIZONS_REVALIDATE = 1800; // 30 min
+/** Short CDN/server cache for TheSkyLive-style live feel (seconds). */
+export const HORIZONS_REVALIDATE = 90;
 
 export class HorizonsResolveError extends Error {
   constructor(message: string) {
@@ -143,17 +146,65 @@ type HorizonsJson = {
   signature?: { source?: string; version?: string };
 };
 
+type ParsedRow = {
+  asOf: Date;
+  raHours: number;
+  decDeg: number;
+  deltaAu: number;
+  magnitude: number | null;
+};
+
+function parseEphemerisRow(line: string): ParsedRow | null {
+  const cols = line.split(",").map((c) => c.trim());
+  // Date, solar, lunar, RA, Dec, APmag, S-brt, delta, deldot
+  const dateRaw = cols[0] ?? "";
+  const raRaw = cols[3] ?? "";
+  const decRaw = cols[4] ?? "";
+  const magRaw = cols[5] ?? "";
+  const deltaRaw = cols[7] ?? "";
+
+  const raHours = parseSexagesimal(raRaw);
+  const decDeg = parseSexagesimal(decRaw);
+  const deltaAu = parseFloat(deltaRaw);
+  const magN = parseFloat(magRaw);
+  const magnitude = Number.isFinite(magN) ? magN : null;
+  const asOf = parseHorizonsDate(dateRaw);
+
+  if (
+    raHours == null ||
+    decDeg == null ||
+    !Number.isFinite(deltaAu) ||
+    asOf == null
+  ) {
+    return null;
+  }
+  return { asOf, raHours, decDeg, deltaAu, magnitude };
+}
+
+export type FetchHorizonsOptions = {
+  /** When true, bypass Next/fetch cache for a fresh Horizons sample. */
+  bustCache?: boolean;
+};
+
+/**
+ * Query a ~2h window around `when` at 10-minute steps and return the
+ * sample closest to wall-clock now (TheSkyLive-style "live" geocentric).
+ */
 export async function fetchHorizonsObserver(
   des: string,
-  when = new Date()
+  when = new Date(),
+  options: FetchHorizonsOptions = {}
 ): Promise<HorizonsEphemeris> {
   const clean = sanitizeDes(des);
   if (!clean) {
     throw new HorizonsResolveError("Missing designation");
   }
 
-  const start = formatHorizonsTime(when);
-  const stop = formatHorizonsTime(new Date(when.getTime() + 60 * 60 * 1000));
+  // ~1h window around now at 1-minute steps; interpolate to Date.now().
+  const startMs = when.getTime() - 20 * 60 * 1000;
+  const stopMs = when.getTime() + 40 * 60 * 1000;
+  const start = formatHorizonsTime(new Date(startMs));
+  const stop = formatHorizonsTime(new Date(stopMs));
 
   const params = new URLSearchParams({
     format: "json",
@@ -164,17 +215,25 @@ export async function fetchHorizonsObserver(
     CENTER: q("500@399"),
     START_TIME: q(start),
     STOP_TIME: q(stop),
-    STEP_SIZE: q("1 d"),
+    STEP_SIZE: q("1 m"),
     QUANTITIES: q("1,9,20"),
     ANG_FORMAT: q("HMS"),
     CSV_FORMAT: q("YES"),
   });
 
   const url = `${HORIZONS_URL}?${params.toString()}`;
-  const res = await fetch(url, {
+  const fetchInit: RequestInit & {
+    next?: { revalidate?: number | false };
+  } = {
     headers: { Accept: "application/json" },
-    next: { revalidate: HORIZONS_REVALIDATE },
-  });
+  };
+  if (options.bustCache) {
+    fetchInit.cache = "no-store";
+  } else {
+    fetchInit.next = { revalidate: HORIZONS_REVALIDATE };
+  }
+
+  const res = await fetch(url, fetchInit);
   if (!res.ok) {
     throw new Error(`JPL Horizons HTTP ${res.status}`);
   }
@@ -206,29 +265,71 @@ export async function fetchHorizonsObserver(
     );
   }
 
-  const cols = lines[0].split(",").map((c) => c.trim());
-  // Date, solar, lunar, RA, Dec, APmag, S-brt, delta, deldot
-  const dateRaw = cols[0] ?? "";
-  const raRaw = cols[3] ?? "";
-  const decRaw = cols[4] ?? "";
-  const magRaw = cols[5] ?? "";
-  const deltaRaw = cols[7] ?? "";
-
-  const raHours = parseSexagesimal(raRaw);
-  const decDeg = parseSexagesimal(decRaw);
-  const deltaAu = parseFloat(deltaRaw);
-  const magN = parseFloat(magRaw);
-  const magnitude = Number.isFinite(magN) ? magN : null;
-
-  if (raHours == null || decDeg == null || !Number.isFinite(deltaAu)) {
+  const rows: ParsedRow[] = [];
+  for (const line of lines) {
+    const row = parseEphemerisRow(line);
+    if (row) rows.push(row);
+  }
+  if (rows.length === 0) {
     throw new HorizonsResolveError(
       `Horizons row for ${clean} was incomplete`
     );
   }
 
+  const targetMs = Date.now();
+  // Prefer bracketing rows so we can interpolate to exact "now"
+  let before: ParsedRow | null = null;
+  let after: ParsedRow | null = null;
+  let closest = rows[0];
+  let closestAbs = Math.abs(closest.asOf.getTime() - targetMs);
+
+  for (const row of rows) {
+    const t = row.asOf.getTime();
+    const abs = Math.abs(t - targetMs);
+    if (abs < closestAbs) {
+      closest = row;
+      closestAbs = abs;
+    }
+    if (t <= targetMs) {
+      if (!before || t > before.asOf.getTime()) before = row;
+    }
+    if (t >= targetMs) {
+      if (!after || t < after.asOf.getTime()) after = row;
+    }
+  }
+
+  let raHours: number;
+  let decDeg: number;
+  let deltaAu: number;
+  let magnitude: number | null;
+  let asOfDate: Date;
+
+  if (before && after && before !== after) {
+    const t0 = before.asOf.getTime();
+    const t1 = after.asOf.getTime();
+    const u = t1 === t0 ? 0 : (targetMs - t0) / (t1 - t0);
+    const clampU = Math.min(1, Math.max(0, u));
+    raHours = lerpRa(before.raHours, after.raHours, clampU);
+    decDeg = before.decDeg + (after.decDeg - before.decDeg) * clampU;
+    deltaAu = before.deltaAu + (after.deltaAu - before.deltaAu) * clampU;
+    if (before.magnitude != null && after.magnitude != null) {
+      magnitude =
+        before.magnitude + (after.magnitude - before.magnitude) * clampU;
+    } else {
+      magnitude = after.magnitude ?? before.magnitude;
+    }
+    asOfDate = new Date(targetMs);
+  } else {
+    raHours = closest.raHours;
+    decDeg = closest.decDeg;
+    deltaAu = closest.deltaAu;
+    magnitude = closest.magnitude;
+    asOfDate = closest.asOf;
+  }
+
   const distanceKm = deltaAu * AU_KM;
+  const lightTravelSeconds = distanceKm / C_KM_S;
   const hit = constellationFromRaDec(raHours, decDeg);
-  const asOfDate = parseHorizonsDate(dateRaw) ?? when;
 
   return {
     des: clean,
@@ -236,6 +337,8 @@ export async function fetchHorizonsObserver(
     constellation: hit.name,
     constellationAbbr: hit.abbr,
     distanceKm,
+    deltaAu,
+    lightTravelSeconds,
     ra: formatRaHms(raHours),
     dec: formatDecDms(decDeg),
     raHours,
@@ -243,8 +346,14 @@ export async function fetchHorizonsObserver(
     magnitude,
     asOf: asOfDate.toISOString(),
     source: "JPL Horizons",
-    deltaAu,
   };
+}
+
+function lerpRa(a: number, b: number, t: number): number {
+  let d = b - a;
+  if (d > 12) d -= 24;
+  if (d < -12) d += 24;
+  return ((a + d * t) % 24 + 24) % 24;
 }
 
 const MONTHS: Record<string, number> = {

@@ -56,5 +56,7 @@ export const LABELS = {
   declination: "Declination (Dec)",
   apparentMagnitude: "Apparent Magnitude (V)",
   geocentricDistance: "Geocentric Distance (Δ)",
+  distanceAu: "Distance (AU)",
+  lightTravel: "Light Travel Time",
   constellation: "Constellation (approx.)",
 } as const;

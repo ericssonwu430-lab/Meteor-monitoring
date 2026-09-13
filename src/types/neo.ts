@@ -207,6 +207,10 @@ export interface HorizonsEphemeris {
   constellation: string;
   constellationAbbr?: string;
   distanceKm: number;
+  /** Geocentric range in AU (Horizons delta). */
+  deltaAu: number;
+  /** Light-travel time from object to Earth center (distanceKm / c). */
+  lightTravelSeconds: number;
   ra: string;
   dec: string;
   raHours?: number;
@@ -214,6 +218,5 @@ export interface HorizonsEphemeris {
   magnitude: number | null;
   asOf: string;
   source: "JPL Horizons";
-  deltaAu?: number;
   error?: string;
 }

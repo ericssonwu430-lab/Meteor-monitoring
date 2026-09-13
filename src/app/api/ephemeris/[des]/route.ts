@@ -5,20 +5,30 @@ import {
   fetchHorizonsObserver,
 } from "@/lib/horizons";
 
-export const revalidate = 1800;
+export const revalidate = 90;
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ des: string }> }
 ) {
   try {
     const { des: raw } = await ctx.params;
     const des = decodeURIComponent(raw);
+    const url = new URL(req.url);
+    const bust =
+      url.searchParams.has("_") ||
+      url.searchParams.has("t") ||
+      url.searchParams.get("live") === "1";
+
     try {
-      const ephemeris = await fetchHorizonsObserver(des);
+      const ephemeris = await fetchHorizonsObserver(des, new Date(), {
+        bustCache: bust,
+      });
       return NextResponse.json(ephemeris, {
         headers: {
-          "Cache-Control": `public, s-maxage=${HORIZONS_REVALIDATE}, stale-while-revalidate=300`,
+          "Cache-Control": bust
+            ? "no-store"
+            : `public, s-maxage=${HORIZONS_REVALIDATE}, stale-while-revalidate=30`,
         },
       });
     } catch (e) {

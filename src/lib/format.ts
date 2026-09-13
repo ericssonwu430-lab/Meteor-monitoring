@@ -91,3 +91,39 @@ export function formatDecShort(deg: number | null | undefined): string {
   if (mm === 60) return `${sign}${dd + 1}° 00′`;
   return `${sign}${dd}° ${pad2(mm)}′`;
 }
+
+/** High-precision AU like TheSkyLive (e.g. 0.0209967975). */
+export function formatDeltaAu(au: number | null | undefined): string {
+  if (au == null || !Number.isFinite(au)) return "—";
+  if (Math.abs(au) >= 1) return au.toFixed(6);
+  if (Math.abs(au) >= 0.01) return au.toFixed(10).replace(/0+$/, "").replace(/\.$/, "");
+  return au.toFixed(10);
+}
+
+/** Light-travel time from range / c (seconds). */
+export function formatLightTravel(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  if (seconds < 60) return `${seconds.toFixed(3)}s`;
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds - m * 60;
+    return `${m}m ${s.toFixed(1)}s`;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+/** Relative age of an as-of timestamp for live badges. */
+export function formatUpdatedAgo(asOfIso: string | null | undefined, nowMs = Date.now()): string {
+  if (!asOfIso) return "—";
+  const t = Date.parse(asOfIso);
+  if (!Number.isFinite(t)) return "—";
+  const sec = Math.max(0, Math.round((nowMs - t) / 1000));
+  if (sec < 1) return "just now";
+  if (sec < 60) return `${sec}s ago`;
+  const m = Math.floor(sec / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return `${h}h ago`;
+}

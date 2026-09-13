@@ -7,10 +7,13 @@ import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 import {
   formatApparentMag,
+  formatDeltaAu,
   formatDiameterKm,
   formatDistanceKm,
   formatImpactPercent,
+  formatLightTravel,
   formatPalermo,
+  formatUpdatedAgo,
   torinoColor,
 } from "@/lib/format";
 import { formatDisplayDate } from "@/lib/timelineDates";
@@ -131,6 +134,14 @@ export default function MeteorDetail({
 
   const orbit = controlled ? orbitProp ?? null : orbitLocal;
   const loading = controlled ? !!loadingProp : loadingLocal;
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!ephemeris) return;
+    setNowMs(Date.now());
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [ephemeris]);
 
   const blurb = useMemo(
     () => (risk ? buildBlurb(risk, orbit) : ""),
@@ -311,6 +322,21 @@ export default function MeteorDetail({
           )}
           {ephemeris && (
             <>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-950/50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  </span>
+                  Live
+                </span>
+                <span className="font-mono text-[10px] text-slate-400">
+                  Updated {formatUpdatedAgo(ephemeris.asOf, nowMs)}
+                </span>
+                <span className="font-mono text-[10px] text-cyan-400/90">
+                  as of {formatDisplayDate(ephemeris.asOf)}
+                </span>
+              </div>
               <p className="mt-1.5 leading-relaxed text-[11px] text-slate-300">
                 <Amber>{ephemeris.name}</Amber>
                 {" is in the constellation of "}
@@ -335,14 +361,42 @@ export default function MeteorDetail({
                 <Cyan>{formatApparentMag(ephemeris.magnitude)}</Cyan>
                 {"."}
               </p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                <div>
+                  <dt>
+                    <LabelWithInfo tip={TIPS.geocentricDistance} className="text-slate-500">
+                      {LABELS.geocentricDistance}
+                    </LabelWithInfo>
+                  </dt>
+                  <dd className="font-mono text-cyan-300">
+                    {formatDistanceKm(ephemeris.distanceKm)} km
+                  </dd>
+                </div>
+                <div>
+                  <dt>
+                    <LabelWithInfo tip={TIPS.distanceAu} className="text-slate-500">
+                      {LABELS.distanceAu}
+                    </LabelWithInfo>
+                  </dt>
+                  <dd className="font-mono text-cyan-300">
+                    {formatDeltaAu(ephemeris.deltaAu)} AU
+                  </dd>
+                </div>
+                <div className="col-span-2">
+                  <dt>
+                    <LabelWithInfo tip={TIPS.lightTravel} className="text-slate-500">
+                      {LABELS.lightTravel}
+                    </LabelWithInfo>
+                  </dt>
+                  <dd className="font-mono text-cyan-300">
+                    {formatLightTravel(ephemeris.lightTravelSeconds)}
+                  </dd>
+                </div>
+              </dl>
               <p className="mt-1.5 text-[10px] text-slate-500">
                 Live apparent geocentric from{" "}
                 <span className="text-slate-400">{LABELS.horizons}</span>
-                {" · as of "}
-                <span className="font-mono text-cyan-400/90">
-                  {formatDisplayDate(ephemeris.asOf)}
-                </span>
-                {" · constellation is approximate from apparent RA/Dec"}
+                {" (CENTER=500@399) · Alt/Az needs an observer site so we stay Earth-centered · constellation is approximate from apparent RA/Dec"}
               </p>
             </>
           )}

@@ -27,6 +27,8 @@ import {
   formatApparentMag,
   formatDecShort,
   formatDistanceKmCompact,
+  formatDeltaAu,
+  formatLightTravel,
   formatImpactPercent,
   formatRaShort,
 } from "@/lib/format";
@@ -1507,9 +1509,19 @@ export default function EarthGlobe({
                   {formatDistanceKmCompact(ephemeris.distanceKm)}
                 </span>
                 <span className="mx-0.5 text-slate-600">·</span>
+                <span className="font-semibold text-cyan-300">
+                  {formatDeltaAu(ephemeris.deltaAu)} AU
+                </span>
+              </div>
+              <div>
                 <span className="text-slate-500">mag </span>
                 <span className="font-semibold text-cyan-300">
                   {formatApparentMag(ephemeris.magnitude)}
+                </span>
+                <span className="mx-0.5 text-slate-600">·</span>
+                <span className="text-slate-500">lt </span>
+                <span className="font-semibold text-cyan-300">
+                  {formatLightTravel(ephemeris.lightTravelSeconds)}
                 </span>
               </div>
               {ephemeris.raHours != null && ephemeris.decDeg != null && (
