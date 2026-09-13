@@ -22,7 +22,6 @@ import { LABELS } from "@/lib/labels";
 import Filters from "@/components/Filters";
 import FireballMap from "@/components/FireballMap";
 import Timeline from "@/components/Timeline";
-import { formatImpactPercent } from "@/lib/format";
 import {
   deriveTimelineDates,
   formatDdMmYyyy,
@@ -718,7 +717,15 @@ export default function GlobeSection({
     return Array.from(map.values());
   }, [risks, cardRisks, selectedIds, primaryId]);
 
-  const top = cardRisks[0];
+  const selectedRisks = useMemo(() => {
+    const byId = new Map<string, RiskEvent>();
+    for (const r of risks) byId.set(riskId(r), r);
+    for (const r of cardRisks) byId.set(riskId(r), r);
+    return selectedList
+      .map((id) => byId.get(id))
+      .filter((r): r is RiskEvent => !!r);
+  }, [selectedList, risks, cardRisks]);
+
 
   const toggleTab = (id: TabId) => {
     setTab((prev) => (prev === id ? null : id));
@@ -891,22 +898,36 @@ export default function GlobeSection({
                   ephemerisError={ephemerisError}
                   className=""
                 />
-                {top && (
-                  <div className="space-y-3">
-                    <ImpactCard event={top} rank={1} isNew={newIds?.has(riskId(top)) ?? false} hero />
-                    <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-                      <p className="text-xs uppercase text-slate-500">
-                        Highest Impact Probability (IP) — filtered
-                      </p>
-                      <p className="mt-1 font-mono text-3xl font-bold text-amber-300">
-                        {formatImpactPercent(top.ip)}
-                      </p>
-                      <p className="mt-2 text-sm text-slate-300">
-                        {top.fullname || top.des} · Virtual Impactor Years (VI years) {top.range}
-                      </p>
+                <div className="space-y-3">
+                  {selectedRisks.length === 0 ? (
+                    <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6 text-center text-sm text-slate-400">
+                      Select meteors in the Meteors tab.
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="grid gap-2">
+                      {selectedRisks.map((ev, i) => {
+                        const id = riskId(ev);
+                        const isPrimary = primaryId === id;
+                        return (
+                          <div
+                            key={id}
+                            className={
+                              isPrimary
+                                ? "rounded-xl ring-1 ring-cyan-500/40"
+                                : undefined
+                            }
+                          >
+                            <ImpactCard
+                              event={ev}
+                              rank={i + 1}
+                              isNew={newIds?.has(id) ?? false}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
