@@ -340,7 +340,7 @@ type Props = {
   showEarthBody?: boolean;
   /** Keep solar system readable even if camera LOD fade is mid-blend (e.g. during Play) */
   forceVisible?: boolean;
-  /** When false, hide Mercury–Neptune bodies/rings (Sun + NEO paths stay) */
+  /** When false, hide Mercury–Neptune bodies (Sun + meteor orbit paths stay) */
   showPlanets?: boolean;
 };
 
@@ -415,7 +415,8 @@ export default function SolarSystemView({
         )}
       </group>
 
-      {/* Major planets + orbit rings — positions follow scrubbed timeline date */}
+      {/* Major planets as fixed educational markers — no orbit rings/paths.
+          Only the meteor heliocentric ellipse + TraceArc follow the time bar. */}
       {showPlanets &&
         PLANET_ORBITS.map((p) => {
           const el: KeplerEl = {
@@ -437,40 +438,22 @@ export default function SolarSystemView({
                 : p.id === "uranus" || p.id === "neptune"
                   ? 0.2
                   : Math.max(0.11, p.size * 1.35);
+          // Detailed Earth LOD owns the globe; skip the small solar marker (and its ring).
           if (isEarth && !showEarthBody) {
-            return (
-              <ScaledOrbitLine
-                key={p.id}
-                el={el}
-                color={p.color}
-                opacity={0.7 * opacity}
-                lineWidth={2.2}
-              />
-            );
+            return null;
           }
           return (
-            <group key={p.id}>
-              <ScaledOrbitLine
-                el={el}
-                color={p.color}
-                opacity={(isEarth ? 0.7 : 0.5) * opacity}
-                lineWidth={isEarth ? 2.2 : 1.6}
-              />
-              <KeplerBody
-                el={el}
-                progress={progress}
-                progressRef={progressRef}
-                timelineStart={timelineStart}
-                timelineEnd={timelineEnd}
-                epochOverride={PLANET_EPOCH}
-                color={p.color}
-                size={sizeBoost}
-                label={p.name}
-                opacity={opacity}
-                showLabel={opacity > 0.65}
-                constantLabel
-              />
-            </group>
+            <KeplerBody
+              key={p.id}
+              el={el}
+              progress={0}
+              color={p.color}
+              size={sizeBoost}
+              label={p.name}
+              opacity={opacity}
+              showLabel={opacity > 0.65}
+              constantLabel
+            />
           );
         })}
 

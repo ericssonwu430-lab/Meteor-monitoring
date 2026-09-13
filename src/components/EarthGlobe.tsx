@@ -1221,29 +1221,14 @@ function SceneContent({
     );
   }, [tracks, visibleTracks, primaryId]);
 
-  const earthPos = useMemo(() => earthHeliocentricPosition(new THREE.Vector3(), null), []);
-  const earthGroupRef = useRef<THREE.Group>(null);
+  const earthPos = useMemo(
+    () => earthHeliocentricPosition(new THREE.Vector3(), null),
+    []
+  );
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const followActiveRef = useRef(false);
   const earthYawRef = useRef(0);
   const [blend, setBlend] = useState(0);
-
-  // Keep Earth LOD seat on the educational Kepler orbit for the scrubbed date
-  useFrame(() => {
-    const t =
-      progressRef && typeof progressRef.current === "number"
-        ? progressRef.current
-        : progress;
-    const at = interpolateDate(
-      timelineStart ?? null,
-      timelineEnd ?? null,
-      Math.min(1, Math.max(0, t))
-    );
-    earthHeliocentricPosition(earthPos, at);
-    if (earthGroupRef.current) {
-      earthGroupRef.current.position.copy(earthPos);
-    }
-  });
 
   // Mirror blendRef into React state at a low rate for material opacity
   const lastBlendUi = useRef(0);
@@ -1335,7 +1320,7 @@ function SceneContent({
       />
 
       {/* Near-Earth LOD — textured globe + atmospheric trails at Earth's heliocentric seat */}
-      <group ref={earthGroupRef} position={earthPos}>
+      <group position={earthPos}>
         <ambientLight intensity={1.05 * earthFade} />
         <hemisphereLight
           args={["#ffffff", "#3d5a3d", 0.85 * earthFade]}
