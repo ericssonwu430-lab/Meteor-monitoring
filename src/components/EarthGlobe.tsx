@@ -1430,7 +1430,7 @@ export default function EarthGlobe({
           {showImpactHud && (
             <div className="pointer-events-auto rounded-md border border-amber-500/45 bg-slate-950/85 px-1.5 py-0.5 text-right shadow-md shadow-black/40 backdrop-blur-sm">
               <p className="inline-flex items-center justify-end gap-1 text-[8px] font-semibold uppercase tracking-wide text-amber-200/85 sm:text-[9px]">
-                Potential impact
+                Illustrative impact
                 <InfoTip
                   text={TIPS.potentialImpact}
                   label="About potential impact location"

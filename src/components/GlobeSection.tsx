@@ -726,7 +726,8 @@ export default function GlobeSection({
                   )}
                   <p className="text-xs text-slate-500">
                     Auto-refresh every 2 minutes · NASA/JPL {LABELS.sentry} ·{" "}
-                    {LABELS.cad} · {LABELS.fireballs} · {LABELS.sbdb}
+                    {LABELS.cad} · {LABELS.fireballs} · {LABELS.sbdb} per
+                    selection
                   </p>
                 </div>
                 <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">

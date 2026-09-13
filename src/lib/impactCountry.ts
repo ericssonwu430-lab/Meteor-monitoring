@@ -40,10 +40,10 @@ export function resolveImpactPlace(
 
 /** Compact subtitle under a meteor name in the picker. */
 export function impactNearPhrase(info: ImpactPlaceInfo): string {
-  if (info.country) return `Impact near ${info.country}`;
+  if (info.country) return `Illustrative end near ${info.country}`;
   // location is already an ocean/sea name when country is null
   const loc = info.location || oceanRegion(0, 0);
-  return `Over ${loc}`;
+  return `Illustrative end over ${loc}`;
 }
 
 function riskId(r: RiskEvent): string {

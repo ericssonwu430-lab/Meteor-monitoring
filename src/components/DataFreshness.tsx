@@ -29,7 +29,8 @@ export default function DataFreshness({ updatedAt, className }: Props) {
       </p>
       <p className="mt-0.5 text-xs text-slate-400">
         Auto-refreshes every 2 minutes from NASA/JPL{" "}
-        {LABELS.sentry}, {LABELS.cad}, {LABELS.fireballs}, and {LABELS.sbdb}.
+        {LABELS.sentry}, {LABELS.cad}, and {LABELS.fireballs}.{" "}
+        {LABELS.sbdb} orbits load per selected object (~5 min cache).
         Impact estimates can change when new observations arrive.
       </p>
     </div>
