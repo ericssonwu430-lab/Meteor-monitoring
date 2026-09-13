@@ -1486,21 +1486,34 @@ export default function EarthGlobe({
     return n + (r && orbits[r.des]?.available ? 1 : 0);
   }, 0);
 
-  const primaryRisk = useMemo(() => {
-    if (primaryId) {
-      const hit = risks.find((r) => (r.id || r.des) === primaryId);
-      if (hit) return hit;
+  const selectedHudItems = useMemo(() => {
+    const byId = new Map(risks.map((r) => [r.id || r.des, r]));
+    const items: { id: string; label: string; ipLabel: string; primary: boolean }[] =
+      [];
+    const seen = new Set<string>();
+    const push = (id: string, primary: boolean) => {
+      if (!id || seen.has(id)) return;
+      const r = byId.get(id);
+      if (!r) return;
+      seen.add(id);
+      items.push({
+        id,
+        label: displayName(r),
+        ipLabel: formatImpactPercent(parseFloat(r.ip) || 0),
+        primary,
+      });
+    };
+    // Primary first (emphasized), then remaining selected
+    const primary =
+      primaryId && activeIds.includes(primaryId)
+        ? primaryId
+        : activeIds[0] ?? null;
+    if (primary) push(primary, true);
+    for (const id of activeIds) {
+      push(id, false);
     }
-    if (activeIds.length) {
-      return risks.find((r) => activeIds.includes(r.id || r.des)) ?? null;
-    }
-    return null;
+    return items;
   }, [risks, primaryId, activeIds]);
-
-  const primaryHudLabel = primaryRisk ? displayName(primaryRisk) : null;
-  const primaryHudIp = primaryRisk
-    ? formatImpactPercent(parseFloat(primaryRisk.ip) || 0)
-    : null;
 
   const modeLabel =
     lodMode === "solar"
@@ -1538,18 +1551,43 @@ export default function EarthGlobe({
         </p>
       </div>
 
-      {/* Compact HUD — keeps name / IP off the globe face */}
-      {primaryHudLabel && lodMode !== "solar" && (
-        <div className="pointer-events-none absolute right-2 top-[3.25rem] z-20 flex max-w-[min(46%,11.5rem)] flex-col items-end gap-1 sm:right-3 sm:top-14 sm:max-w-[13rem]">
-          <div className="whitespace-nowrap rounded-full border border-cyan-500/40 bg-slate-950/80 px-1.5 py-0.5 font-mono text-[9px] leading-tight text-slate-100 shadow-md shadow-black/40 backdrop-blur-sm sm:text-[10px]">
-            <span className="font-semibold text-cyan-200">{primaryHudLabel}</span>
-            {primaryHudIp && (
-              <>
-                <span className="mx-0.5 text-slate-500">·</span>
-                <span className="font-bold text-amber-300">{primaryHudIp}</span>
-              </>
-            )}
-          </div>
+      {/* Compact HUD — all selected name · IP% off the globe face */}
+      {selectedHudItems.length > 0 && lodMode !== "solar" && (
+        <div className="pointer-events-none absolute right-2 top-[3.25rem] z-20 flex max-h-[min(42vh,16rem)] max-w-[min(46%,12rem)] flex-col items-end gap-1 overflow-y-auto sm:right-3 sm:top-14 sm:max-h-[min(48vh,20rem)] sm:max-w-[14rem]">
+          {selectedHudItems.map((item) => (
+            <div
+              key={item.id}
+              className={`whitespace-nowrap rounded-full border px-1.5 py-0.5 font-mono text-[9px] leading-tight shadow-md shadow-black/40 backdrop-blur-sm sm:text-[10px] ${
+                item.primary
+                  ? "border-cyan-500/50 bg-slate-950/85 text-slate-100"
+                  : "border-slate-600/45 bg-slate-950/70 text-slate-300"
+              }`}
+            >
+              <span
+                className={
+                  item.primary
+                    ? "font-semibold text-cyan-200"
+                    : "font-semibold text-cyan-200/75"
+                }
+              >
+                {item.label}
+              </span>
+              {item.ipLabel && (
+                <>
+                  <span className="mx-0.5 text-slate-500">·</span>
+                  <span
+                    className={
+                      item.primary
+                        ? "font-bold text-amber-300"
+                        : "font-bold text-amber-300/80"
+                    }
+                  >
+                    {item.ipLabel}
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
           {ephemeris && (
             <div className="rounded-md border border-cyan-700/35 bg-slate-950/75 px-1.5 py-0.5 font-mono text-[8px] leading-tight text-slate-200 shadow-md shadow-black/40 backdrop-blur-sm sm:text-[9px]">
               <div>

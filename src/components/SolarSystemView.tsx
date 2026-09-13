@@ -551,7 +551,7 @@ export default function SolarSystemView({
               ipLabel={formatImpactPercent(r.ip)}
               highlighted={highlighted}
               opacity={opacity}
-              showLabel={highlighted && opacity > 0.4}
+              showLabel={opacity > 0.4}
             />
           </group>
         );
