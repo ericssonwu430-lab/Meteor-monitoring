@@ -7,10 +7,6 @@ import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 import { discoveryYear } from "@/lib/discovery";
 import { formatImpactPercent } from "@/lib/format";
-import {
-  impactNearPhrase,
-  useImpactPlaces,
-} from "@/lib/impactCountry";
 
 type Props = {
   risks: RiskEvent[];
@@ -57,7 +53,6 @@ export default function MeteorPicker({
   /** Years currently expanded; empty = all collapsed */
   const [openYears, setOpenYears] = useState<Set<string>>(() => new Set());
   const selectedCount = selectedIds.size;
-  const impactPlaces = useImpactPlaces(risks);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -67,19 +62,14 @@ export default function MeteorPicker({
       const des = (r.des || "").toLowerCase();
       const full = (r.fullname || "").toLowerCase();
       const year = yearKey(r).toLowerCase();
-      const place = impactPlaces.get(riskId(r));
-      const country = (place?.country || "").toLowerCase();
-      const location = (place?.location || "").toLowerCase();
       return (
         name.includes(q) ||
         des.includes(q) ||
         full.includes(q) ||
-        year.includes(q) ||
-        country.includes(q) ||
-        location.includes(q)
+        year.includes(q)
       );
     });
-  }, [risks, query, impactPlaces]);
+  }, [risks, query]);
 
   const groups = useMemo(() => {
     const map = new Map<string, RiskEvent[]>();
@@ -124,8 +114,8 @@ export default function MeteorPicker({
             <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-cyan-400/90">
               Meteors
               <InfoTip
-                text={TIPS.potentialImpact}
-                label="About impact country search"
+                text={TIPS.meteorsList}
+                label="About meteors list"
               />
             </p>
             <p className="text-xs text-slate-400">
@@ -160,7 +150,7 @@ export default function MeteorPicker({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, year, or illustrative impact country…"
+            placeholder="Search name or year…"
             className="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
             autoComplete="off"
             enterKeyHint="search"
@@ -210,8 +200,6 @@ export default function MeteorPicker({
                 const isNew = newIds?.has(id) ?? false;
                 const ip = parseFloat(r.ip) || 0;
                 const name = displayName(r);
-                const place = impactPlaces.get(id);
-                const placeLine = place ? impactNearPhrase(place) : null;
                 return (
                   <li key={id}>
                     <div
@@ -249,11 +237,6 @@ export default function MeteorPicker({
                           {name !== r.des && (
                             <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">
                               {r.des}
-                            </span>
-                          )}
-                          {placeLine && (
-                            <span className="mt-0.5 block truncate text-[10px] text-slate-500">
-                              {placeLine}
                             </span>
                           )}
                         </span>

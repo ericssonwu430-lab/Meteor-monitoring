@@ -1,7 +1,7 @@
 /**
- * Reverse-geocode asteroid/fireball event coordinates only — never visitor IP/GPS.
+ * Reverse-geocode fireball event coordinates only — never visitor IP/GPS.
  * Shared memory cache + Nominatim throttle for /api/geocode and /api/fireballs.
- * Country labels are requested in English so MeteorPicker search stays consistent.
+ * Country labels are requested in English for consistent fireball “Spotted near” copy.
  */
 import { oceanRegion } from "@/lib/fireballLocation";
 
@@ -53,7 +53,7 @@ async function reverseGeocodeNominatim(
     url.searchParams.set("lon", String(lon));
     url.searchParams.set("zoom", "3");
     url.searchParams.set("addressdetails", "1");
-    // Force English country labels for impact-country search.
+    // Force English country labels for fireball location display.
     url.searchParams.set("accept-language", "en");
     const res = await fetch(url.toString(), {
       headers: {

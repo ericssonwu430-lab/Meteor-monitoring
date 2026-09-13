@@ -18,7 +18,7 @@ npm run build && npm start
 - **Scrubbable trajectory timeline** (play/pause) shared with Earth and solar views
 - **Continuous zoom** from near-Earth trails to heliocentric SBDB orbits
 - **Play → camera follow + auto-zoom** on the primary meteor (drag overrides; Play resumes)
-- **Timeline dates** in `dd/mm/yyyy` from Sentry/SBDB + best-effort impact country (not NASA-official)
+- **Timeline dates** in `dd/mm/yyyy` from Sentry/SBDB (no geographic impact country for Sentry NEOs — NASA does not publish that)
 - **Origin + brief details** (orbit class, elements, observation arc) from SBDB + Sentry
 - Object detail page with virtual-impactor table
 - Close approaches (CAD, next 60 days, ≤ 0.05 AU)
@@ -48,7 +48,7 @@ Proxied via Next.js route handlers (`revalidate` ~90–300s):
 | `/api/cad` | `cad.api?body=Earth&neo=true&date-min=now&date-max=+60&dist-max=0.05&sort=date` |
 | `/api/fireballs` | `fireball.api?limit=50` |
 | `/api/sbdb/[des]` | `sbdb.api?sstr=` |
-| `/api/geocode` | OpenStreetMap Nominatim reverse (asteroid lat/lon only; cached) |
+| `/api/geocode` | OpenStreetMap Nominatim reverse (fireball lat/lon only; cached) |
 
 Attribution: **NASA/JPL Solar System Dynamics** APIs. This app is for education/monitoring — not official emergency alerting.
 
@@ -66,5 +66,5 @@ Most Sentry objects have tiny cumulative probabilities over decades. A large dis
 - No user accounts, identity cookies, or analytics in this app.
 - No collection of names, emails, or browser geolocation.
 - Client calls only this app’s `/api/*` routes; NASA/JPL and reverse-geocode run on the server.
-- Impact-country geocode uses asteroid lat/lon only (never the visitor’s location).
+- Fireball “Spotted near” geocode uses NASA CNEOS fireball lat/lon only (never the visitor’s location). Sentry NEOs have no scientific impact-country field in this app.
 - Hosting platforms may retain standard access logs (IP, user-agent) per their policies.

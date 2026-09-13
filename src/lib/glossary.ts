@@ -74,6 +74,4 @@ export const TIPS = {
     "The meteor currently highlighted for details and camera follow.",
   neoMonitor:
     "Live near-Earth object risk dashboard fed by public NASA/JPL sources.",
-  potentialImpact:
-    "Country or ocean under the animated near-Earth path endpoint on the globe. This endpoint is illustrative (seeded for visualization) — not an official NASA/Sentry ground track. Over water we show an ocean basin, not a guessed country. Country names are in English so you can search them in the meteor list.",
 } as const;

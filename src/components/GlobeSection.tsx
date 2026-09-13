@@ -22,8 +22,6 @@ import Filters from "@/components/Filters";
 import FireballMap from "@/components/FireballMap";
 import Timeline from "@/components/Timeline";
 import { formatImpactPercent } from "@/lib/format";
-import { impactLatLonForDes } from "@/lib/meteorTrack";
-import { placeName } from "@/lib/fireballLocation";
 import {
   deriveTimelineDates,
   formatDdMmYyyy,
@@ -120,9 +118,6 @@ export default function GlobeSection({
   const [sentryDetail, setSentryDetail] = useState<SentryDetailResponse | null>(
     null
   );
-  const [impactCountry, setImpactCountry] = useState<string | null>(null);
-  const [impactCountryReady, setImpactCountryReady] = useState(false);
-  const countryCache = useRef<Record<string, string | null>>({});
   const sentryCache = useRef<Record<string, SentryDetailResponse>>({});
 
   const idsKey = useMemo(
@@ -267,58 +262,6 @@ export default function GlobeSection({
       cancelled = true;
     };
   }, [primaryRisk?.des]);
-
-  // Reverse-geocode SAME illustrative path endpoint used by the globe ring / HUD
-  useEffect(() => {
-    if (!primaryRisk) {
-      setImpactCountry(null);
-      setImpactCountryReady(false);
-      return;
-    }
-    const seedKey = primaryRisk.des || primaryRisk.id || "";
-    const idx = risks.findIndex((r) => riskId(r) === riskId(primaryRisk));
-    const { lat, lon } = impactLatLonForDes(seedKey, idx >= 0 ? idx : 0);
-    const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-    if (key in countryCache.current) {
-      setImpactCountry(countryCache.current[key]);
-      setImpactCountryReady(true);
-      return;
-    }
-    let cancelled = false;
-    setImpactCountryReady(false);
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/geocode?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`
-        );
-        const json = await res.json();
-        if (cancelled) return;
-        const country =
-          typeof json.country === "string" && json.country.trim()
-            ? json.country.trim()
-            : null;
-        // Prefer API location (includes ocean fallback); else placeName helper
-        const fromApi =
-          typeof json.location === "string" && json.location.trim()
-            ? json.location.trim()
-            : null;
-        const label = fromApi || placeName(lat, lon, country);
-        countryCache.current[key] = label;
-        setImpactCountry(label);
-      } catch {
-        if (!cancelled) {
-          const fallback = placeName(lat, lon, null);
-          countryCache.current[key] = fallback;
-          setImpactCountry(fallback);
-        }
-      } finally {
-        if (!cancelled) setImpactCountryReady(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [primaryRisk, risks]);
 
   const timelineDates = useMemo(
     () =>
@@ -493,8 +436,6 @@ export default function GlobeSection({
           fireballs={locatedFireballs}
           showFireballs={showFireballs}
           showPlanets={showPlanets}
-          impactCountry={impactCountry}
-          impactCountryReady={impactCountryReady}
           selectedIds={selectedList}
           primaryId={primaryId}
           progress={progress}
@@ -750,7 +691,7 @@ export default function GlobeSection({
                   The browser only talks to this app&apos;s{" "}
                   <code className="text-slate-400">/api/*</code> routes (plus
                   static Earth textures). NASA/JPL and reverse-geocode calls run
-                  on the server; geocode uses asteroid path coordinates only —
+                  on the server; geocode uses fireball event lat/lon only —
                   never your IP or device location. Hosting providers may still
                   keep standard server logs (e.g. IP) outside this app&apos;s
                   control.

@@ -25,8 +25,6 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
 import { formatImpactPercent } from "@/lib/format";
 import { hashString, impactLatLonForDes, seededUnit } from "@/lib/meteorTrack";
-import InfoTip from "@/components/InfoTip";
-import { TIPS } from "@/lib/glossary";
 import SolarSystemView, {
   AU_SCALE,
   earthHeliocentricPosition,
@@ -60,9 +58,6 @@ type Props = {
   showFireballs?: boolean;
   /** Show Mercury–Neptune in solar-system view */
   showPlanets?: boolean;
-  /** Best-effort impact country for the primary meteor (shown on Earth) */
-  impactCountry?: string | null;
-  impactCountryReady?: boolean;
   selectedIds?: string[];
   primaryId?: string | null;
   className?: string;
@@ -1153,7 +1148,7 @@ function SceneContent({
   const solarFade = blend;
   // Show small Earth marker once detailed globe has mostly faded
   const showSolarEarth = blend > 0.55;
-  // Hold continents whenever potential-impact country is shown (HUD ≥0.92) or at end
+  // Hold continents near end of approach scrub for overview framing
   const impactOverviewHold = progress >= 0.92;
 
   return (
@@ -1298,8 +1293,6 @@ export default function EarthGlobe({
   fireballs,
   showFireballs = true,
   showPlanets = true,
-  impactCountry = null,
-  impactCountryReady = false,
   selectedIds,
   primaryId,
   className,
@@ -1373,10 +1366,6 @@ export default function EarthGlobe({
     ? formatImpactPercent(parseFloat(primaryRisk.ip) || 0)
     : null;
 
-  const showImpactHud =
-    Boolean(impactCountryReady) && progress >= 0.92 && lodMode !== "solar";
-  const impactHudCountry = impactCountry?.trim() ? impactCountry : "Undetermined";
-
   const modeLabel =
     lodMode === "solar"
       ? "Solar system"
@@ -1413,37 +1402,18 @@ export default function EarthGlobe({
         </p>
       </div>
 
-      {/* Compact HUD — keeps name / IP / impact country off the globe face */}
-      {(primaryHudLabel || showImpactHud) && lodMode !== "solar" && (
+      {/* Compact HUD — keeps name / IP off the globe face */}
+      {primaryHudLabel && lodMode !== "solar" && (
         <div className="pointer-events-none absolute right-2 top-[3.25rem] z-20 flex max-w-[min(46%,11.5rem)] flex-col items-end gap-1 sm:right-3 sm:top-14 sm:max-w-[13rem]">
-          {primaryHudLabel && (
-            <div className="whitespace-nowrap rounded-full border border-cyan-500/40 bg-slate-950/80 px-1.5 py-0.5 font-mono text-[9px] leading-tight text-slate-100 shadow-md shadow-black/40 backdrop-blur-sm sm:text-[10px]">
-              <span className="font-semibold text-cyan-200">{primaryHudLabel}</span>
-              {primaryHudIp && (
-                <>
-                  <span className="mx-0.5 text-slate-500">·</span>
-                  <span className="font-bold text-amber-300">{primaryHudIp}</span>
-                </>
-              )}
-            </div>
-          )}
-          {showImpactHud && (
-            <div className="pointer-events-auto rounded-md border border-amber-500/45 bg-slate-950/85 px-1.5 py-0.5 text-right shadow-md shadow-black/40 backdrop-blur-sm">
-              <p className="inline-flex items-center justify-end gap-1 text-[8px] font-semibold uppercase tracking-wide text-amber-200/85 sm:text-[9px]">
-                Illustrative impact
-                <InfoTip
-                  text={TIPS.potentialImpact}
-                  label="About potential impact location"
-                />
-              </p>
-              <p className="truncate text-[9px] font-semibold text-amber-100 sm:text-[10px]">
-                {impactHudCountry}
-              </p>
-              <p className="text-[7px] font-normal normal-case tracking-normal text-slate-400 sm:text-[8px]">
-                Illustrative path end — not NASA ground track
-              </p>
-            </div>
-          )}
+          <div className="whitespace-nowrap rounded-full border border-cyan-500/40 bg-slate-950/80 px-1.5 py-0.5 font-mono text-[9px] leading-tight text-slate-100 shadow-md shadow-black/40 backdrop-blur-sm sm:text-[10px]">
+            <span className="font-semibold text-cyan-200">{primaryHudLabel}</span>
+            {primaryHudIp && (
+              <>
+                <span className="mx-0.5 text-slate-500">·</span>
+                <span className="font-bold text-amber-300">{primaryHudIp}</span>
+              </>
+            )}
+          </div>
         </div>
       )}
 
