@@ -120,7 +120,7 @@ const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
 
 const DEFAULT_SELECT = 3;
 /** Full first-obs → potential-impact scrub duration at 1×. */
-const LOOP_SECONDS = 8;
+const LOOP_SECONDS = 60;
 /** Treat scrubbed time within this of wall-clock as "live / now". */
 const NEAR_NOW_MS = 90_000;
 
@@ -182,7 +182,7 @@ export default function GlobeSection({
   const [progress, setProgress] = useState(0);
   const progressRef = useRef(0);
   const [playing, setPlaying] = useState(true);
-  const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
+  const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(0.5);
   const [lodMode, setLodMode] = useState<LodMode>("earth");
   const [showFireballsLocal, setShowFireballsLocal] = useState(true);
   const [showPlanetsLocal, setShowPlanetsLocal] = useState(true);
