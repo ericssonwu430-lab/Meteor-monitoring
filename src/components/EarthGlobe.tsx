@@ -35,17 +35,8 @@ import {
 import { raDecToSubstellar } from "@/lib/skyDirection";
 import { hashString, impactLatLonForDes, seededUnit } from "@/lib/meteorTrack";
 import SolarSystemView, {
-  AU_SCALE,
   earthHeliocentricPosition,
-  resolveOrbit,
 } from "@/components/SolarSystemView";
-import {
-  compactOrbitElements,
-  keplerPositionFromMeanAnomaly,
-  meanAnomalyDegreesAt,
-  resolveEpochDate,
-} from "@/lib/orbit";
-import { interpolateDate } from "@/lib/timelineDates";
 
 const EARTH_RADIUS = 1;
 const MAX_METEORS = 40;
@@ -920,11 +911,7 @@ function FollowCamera({
   playing,
   progress,
   progressRef,
-  timelineStart,
-  timelineEnd,
   primaryTrack,
-  primaryDes,
-  orbits,
   earthPos,
   earthYawRef,
   controlsRef,
@@ -933,11 +920,7 @@ function FollowCamera({
   playing: boolean;
   progress: number;
   progressRef?: MutableRefObject<number>;
-  timelineStart?: Date | null;
-  timelineEnd?: Date | null;
   primaryTrack: MeteorTrack | null;
-  primaryDes?: string | null;
-  orbits: Record<string, OrbitElements>;
   earthPos: THREE.Vector3;
   earthYawRef: MutableRefObject<number>;
   controlsRef: MutableRefObject<OrbitControlsImpl | null>;
@@ -948,7 +931,6 @@ function FollowCamera({
   const wasPlaying = useRef(false);
   const meteorLocal = useRef(new THREE.Vector3());
   const meteorWorld = useRef(new THREE.Vector3());
-  const solarPos = useRef(new THREE.Vector3());
   const desiredTarget = useRef(new THREE.Vector3());
   const desiredCam = useRef(new THREE.Vector3());
   const viewOffset = useRef(new THREE.Vector3(0.55, 0.85, 1));
@@ -1055,25 +1037,6 @@ function FollowCamera({
         : progress;
     const t = Math.min(1, Math.max(0, raw));
 
-    // Heliocentric position from scrubbed timeline date (SBDB epoch + mean motion)
-    const des = primaryDes || primaryTrack.des || primaryTrack.id;
-    const { el } = resolveOrbit(des, orbits[des]);
-    const atDate = interpolateDate(
-      timelineStart ?? null,
-      timelineEnd ?? null,
-      t
-    );
-    const displayEl = compactOrbitElements(el);
-    const epochDate = resolveEpochDate(el);
-    if (epochDate && atDate) {
-      const M = meanAnomalyDegreesAt(el, epochDate, atDate);
-      keplerPositionFromMeanAnomaly(displayEl, M, solarPos.current);
-    } else {
-      // Missing epoch/SBDB: freeze at catalog ma (hashed approx still draws)
-      keplerPositionFromMeanAnomaly(displayEl, el.ma ?? 0, solarPos.current);
-    }
-    solarPos.current.multiplyScalar(AU_SCALE);
-
     // Near-Earth Bezier approach: same timeline progress; end = impact at t=1
     // (illustrative atmospheric geometry — not a predicted ground track)
     bezierPoint(
@@ -1090,25 +1053,22 @@ function FollowCamera({
     );
     meteorWorld.current.copy(meteorLocal.current).add(earthPos);
 
-    // 0 → ~0.72: follow the solar-system path; then blend into Earth impact
-    const toEarth = smoothstep(0.72, 0.98, t);
+    // Play-follow stays Earth-centered for essentially the whole bar.
+    // Do NOT chase the heliocentric orange ellipse / solarFar zoom-out.
+    // Only late in the bar, ease target onto the near-Earth meteor / impact.
+    const toImpact = smoothstep(0.92, 1.0, t);
     desiredTarget.current.lerpVectors(
-      solarPos.current,
+      earthPos,
       meteorWorld.current,
-      toEarth
+      THREE.MathUtils.lerp(0.2, 1, toImpact)
     );
 
-    // Auto-zoom: wide solar frame at the start → tight Earth at the end
-    const a = displayEl.a ?? 1;
-    const e = displayEl.e ?? 0;
-    const orbitSpan = a * AU_SCALE * (1 + e);
-    const solarFar = Math.min(110, Math.max(36, orbitSpan * 2.1));
+    // Stay at Earth viewing distance until the end; post-play overview uses zoomOutActive
     const earthNear = 2.15;
-    const zoomT = smoothstep(0.02, 0.97, t);
-    const camDist = THREE.MathUtils.lerp(solarFar, earthNear, zoomT);
+    const camDist = earthNear;
 
-    // Elevated ecliptic viewpoint so the full ellipse + planets read clearly
-    const preferred = new THREE.Vector3(0.45, 0.95, 0.55).normalize();
+    // Earth-facing viewpoint (user may still manually zoom out to see orange orbit)
+    const preferred = new THREE.Vector3(0.35, 0.55, 1).normalize();
     viewOffset.current.lerp(preferred, 0.12);
     viewOffset.current.normalize();
 
@@ -1287,15 +1247,7 @@ function SceneContent({
         playing={playing && !paused}
         progress={progress}
         progressRef={progressRef}
-        timelineStart={timelineStart}
-        timelineEnd={timelineEnd}
         primaryTrack={primaryTrack}
-        primaryDes={
-          risks.find((r) => (r.id || r.des) === primaryId)?.des ??
-          primaryTrack?.des ??
-          null
-        }
-        orbits={orbits}
         earthPos={earthPos}
         earthYawRef={earthYawRef}
         controlsRef={controlsRef}

@@ -116,6 +116,7 @@ export function keplerPosition(
 
 /**
  * Resolve osculating epoch Date from element string or override.
+ * Accepts calendar strings and SBDB Julian Day epochs (via parseLooseDate).
  */
 export function resolveEpochDate(
   el: { epoch?: string | null },
@@ -146,7 +147,8 @@ export function keplerPositionAtDate(
 
 /**
  * Mean-anomaly arc from timeline start (or epoch) → scrubbed date for TraceArc.
- * deltaFrac is the forward fraction of one orbit (0..1), not multi-rev scribble.
+ * Uses unwrapped ΔM so long timelines can span >1 orbit; when ΔM > 360°,
+ * returns a last-orbit arc ending at the scrubbed anomaly (deltaFrac ≤ 1).
  */
 export function meanAnomalyArcBetweenDates(
   el: KeplerEl,
@@ -161,11 +163,29 @@ export function meanAnomalyArcBetweenDates(
   }
   const from =
     startDate && Number.isFinite(startDate.getTime()) ? startDate : epochDate;
-  const maStart = meanAnomalyDegreesAt(el, epochDate, from);
-  const maAt = meanAnomalyDegreesAt(el, epochDate, atDate);
-  let delta = maAt - maStart;
-  delta = ((delta % 360) + 360) % 360;
-  return { maStart, maAt, deltaFrac: delta / 360 };
+  const a = el.a ?? 1;
+  const periodDays = orbitalPeriodYears(a) * 365.25;
+  const n = 360 / periodDays; // deg/day
+  const ma0 = el.ma ?? 0;
+  const daysToStart = (from.getTime() - epochDate.getTime()) / 86_400_000;
+  const daysToAt = (atDate.getTime() - epochDate.getTime()) / 86_400_000;
+  const maStartUnwrapped = ma0 + n * daysToStart;
+  const maAtUnwrapped = ma0 + n * daysToAt;
+  let delta = maAtUnwrapped - maStartUnwrapped;
+  if (delta < 0) delta = 0;
+  // Last-orbit glow when the timeline spans multiple revolutions
+  if (delta > 360) {
+    return {
+      maStart: maAtUnwrapped - 360,
+      maAt: maAtUnwrapped,
+      deltaFrac: 1,
+    };
+  }
+  return {
+    maStart: maStartUnwrapped,
+    maAt: maAtUnwrapped,
+    deltaFrac: delta / 360,
+  };
 }
 
 /** Sample a closed Keplerian ellipse into Vector3 points (AU space). */

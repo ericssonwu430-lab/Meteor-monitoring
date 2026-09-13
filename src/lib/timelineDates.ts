@@ -58,6 +58,16 @@ export function parseLooseDate(raw: string | null | undefined): Date | null {
   const s = raw.trim();
   if (!s) return null;
 
+  // SBDB osculating epoch is often a Julian Day number (e.g. "2461200.5").
+  // JD 2440587.5 = 1970-01-01T00:00:00.000Z; typical modern epochs ≈ 2.4e6–2.7e6.
+  if (/^\d{7}(?:\.\d+)?$/.test(s)) {
+    const jd = Number(s);
+    if (Number.isFinite(jd) && jd >= 2.4e6 && jd <= 2.7e6) {
+      const d = new Date((jd - 2440587.5) * 86_400_000);
+      return Number.isFinite(d.getTime()) ? d : null;
+    }
+  }
+
   const named = s.match(
     /^(\d{4})-([A-Za-z]{3})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/
   );

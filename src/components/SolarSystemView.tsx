@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Html, Line } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -265,6 +265,7 @@ function KeplerBody({
 function TraceArc({
   el,
   progress,
+  progressRef,
   timelineStart,
   timelineEnd,
   epochOverride,
@@ -274,6 +275,7 @@ function TraceArc({
 }: {
   el: KeplerEl;
   progress: number;
+  progressRef?: MutableRefObject<number>;
   timelineStart?: Date | null;
   timelineEnd?: Date | null;
   epochOverride?: Date | null;
@@ -281,11 +283,27 @@ function TraceArc({
   opacity: number;
   lineWidth: number;
 }) {
-  const points = useMemo(() => {
+  // Seed with a tiny segment so <Line> always has ≥2 points
+  const [points, setPoints] = useState<THREE.Vector3[]>(() => [
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.01, 0, 0),
+  ]);
+  const lastT = useRef(-1);
+
+  useFrame(() => {
+    const t =
+      progressRef && typeof progressRef.current === "number"
+        ? progressRef.current
+        : progress;
+    const clamped = Math.min(1, Math.max(0, t));
+    // Rebuild when scrub/play moves (or el/timeline identity changes via lastT reset below)
+    if (Math.abs(clamped - lastT.current) < 0.0015) return;
+    lastT.current = clamped;
+
     const at = interpolateDate(
       timelineStart ?? null,
       timelineEnd ?? null,
-      Math.min(1, Math.max(0, progress))
+      clamped
     );
     const { maStart, deltaFrac } = meanAnomalyArcBetweenDates(
       el,
@@ -306,8 +324,24 @@ function TraceArc({
       );
       pts.push(p.multiplyScalar(AU_SCALE));
     }
-    return pts;
-  }, [el, progress, timelineStart, timelineEnd, epochOverride]);
+    setPoints(pts);
+  });
+
+  // Force rebuild when orbit/timeline inputs change (primitive deps — el is a fresh object each render)
+  useEffect(() => {
+    lastT.current = -1;
+  }, [
+    el.a,
+    el.e,
+    el.i,
+    el.om,
+    el.w,
+    el.ma,
+    el.epoch,
+    timelineStart,
+    timelineEnd,
+    epochOverride,
+  ]);
 
   if (opacity < 0.02 || points.length < 2) return null;
 
@@ -494,6 +528,7 @@ export default function SolarSystemView({
             <TraceArc
               el={el}
               progress={progress}
+              progressRef={progressRef}
               timelineStart={timelineStart}
               timelineEnd={timelineEnd}
               color={highlighted ? "#fbbf24" : "#cbd5e1"}

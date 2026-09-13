@@ -188,7 +188,7 @@ export interface OrbitElements {
   ma: number | null;
   q: number | null;
   ad: number | null;
-  /** SBDB osculating epoch (calendar string) for mean anomaly propagation. */
+  /** SBDB osculating epoch (Julian Day or calendar string) for mean anomaly propagation. */
   epoch: string | null;
   orbitClass: string | null;
   orbitClassCode: string | null;
