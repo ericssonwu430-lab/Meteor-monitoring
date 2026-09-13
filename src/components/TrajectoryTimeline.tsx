@@ -16,11 +16,11 @@ type Props = {
   labelStart?: string;
   labelMid?: string;
   labelEnd?: string;
-  /** 0–1 position of wall-clock "now" within the scrub window (Horizons). */
+  /** 0–1 position of wall-clock "now" within first-obs → impact (null if outside). */
   nowProgress?: number | null;
   /** When scrubbed time is near wall-clock now. */
   nearNow?: boolean;
-  /** Optional caption under the bar (e.g. Horizons vs Sentry). */
+  /** Optional caption under the bar (Sentry span vs live Horizons). */
   caption?: string;
   disabled?: boolean;
   className?: string;

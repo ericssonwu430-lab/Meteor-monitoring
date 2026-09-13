@@ -146,46 +146,59 @@ export function deriveTimelineDates(
   if (!risk) return empty;
 
   const { startYear, endYear } = parseRangeYears(risk.range);
-  const viDates = (detail?.data ?? [])
-    .map((v) => parseLooseDate(v.date))
-    .filter((d): d is Date => d != null)
-    .sort((a, b) => a.getTime() - b.getTime());
+  const viRaw = detail?.data ?? [];
+  const viParsed = viRaw
+    .map((v) => ({ raw: v.date, date: parseLooseDate(v.date) }))
+    .filter((x): x is { raw: string; date: Date } => x.date != null)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  const firstObs =
-    parseLooseDate(detail?.summary?.first_obs) ||
-    parseLooseDate(orbit?.firstObs) ||
-    parseLooseDate(risk.last_obs);
+  // START = first observation (Sentry summary / SBDB); fall back only if missing.
+  const firstObsRaw =
+    detail?.summary?.first_obs || orbit?.firstObs || risk.last_obs || null;
+  const firstObs = parseLooseDate(firstObsRaw);
 
-  const candidatesStart: Date[] = [];
-  if (firstObs) candidatesStart.push(firstObs);
-  if (viDates[0]) candidatesStart.push(viDates[0]);
-  if (startYear != null) candidatesStart.push(new Date(Date.UTC(startYear, 0, 1)));
-
-  const candidatesEnd: Date[] = [];
-  if (viDates.length) candidatesEnd.push(viDates[viDates.length - 1]);
-  if (endYear != null) candidatesEnd.push(new Date(Date.UTC(endYear, 11, 31)));
-  if (startYear != null && endYear == null) {
-    candidatesEnd.push(new Date(Date.UTC(startYear, 11, 31)));
+  let start: Date | null = firstObs;
+  let startRaw: string | null = firstObs ? firstObsRaw : null;
+  if (!start && viParsed[0]) {
+    start = viParsed[0].date;
+    startRaw = viParsed[0].raw;
+  }
+  if (!start && startYear != null) {
+    start = new Date(Date.UTC(startYear, 0, 1));
+    startRaw = null;
   }
 
-  const start =
-    candidatesStart.length > 0
-      ? candidatesStart.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b))
-      : null;
-  let end =
-    candidatesEnd.length > 0
-      ? candidatesEnd.reduce((a, b) => (a.getTime() >= b.getTime() ? a : b))
-      : null;
+  // END = latest virtual-impactor date, else end of risk.range VI years.
+  let end: Date | null = null;
+  let endRaw: string | null = null;
+  if (viParsed.length) {
+    const last = viParsed[viParsed.length - 1];
+    end = last.date;
+    endRaw = last.raw;
+  }
+  if (!end && endYear != null) {
+    end = new Date(Date.UTC(endYear, 11, 31));
+    endRaw = null;
+  }
+  if (!end && startYear != null) {
+    end = new Date(Date.UTC(startYear, 11, 31));
+    endRaw = null;
+  }
 
   if (start && end && end.getTime() < start.getTime()) {
     end = new Date(start.getTime());
+    endRaw = startRaw;
   }
 
   return {
     start,
     end,
-    labelStart: start ? formatDdMmYyyy(start) : "—",
-    labelEnd: end ? formatDdMmYyyy(end) : "—",
+    labelStart: start
+      ? formatDdMmYyyy(start, { time: !!(startRaw && hasClockTime(startRaw)) })
+      : "—",
+    labelEnd: end
+      ? formatDdMmYyyy(end, { time: !!(endRaw && hasClockTime(endRaw)) })
+      : "—",
   };
 }
 

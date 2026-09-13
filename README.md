@@ -20,7 +20,7 @@ npm run build && npm start
 - **Play → camera follow + auto-zoom** on the primary meteor (drag overrides; Play resumes)
 - **Timeline dates** in `dd/mm/yyyy` from Sentry/SBDB (no geographic impact country for Sentry NEOs — NASA does not publish that)
 - **Origin + brief details** (orbit class, elements, observation arc) from SBDB + Sentry
-- **Live sky position** on Details + globe HUD from JPL Horizons (geocentric RA/Dec, distance, V mag; approximate constellation). When available, the trajectory time bar uses the Horizons minute-level UTC window (−6h…+18h), not Sentry VI decades.
+- **Live sky position** on Details + globe HUD from JPL Horizons (geocentric RA/Dec, distance, V mag; approximate constellation). The trajectory time bar spans first observation → potential impact (Sentry/SBDB); Horizons minute samples apply only when the scrubbed UTC falls inside the loaded −6h…+18h window.
 - Object detail page with virtual-impactor table
 - Close approaches (CAD, next 60 days, ≤ 0.05 AU)
 - Recent fireballs on a simple SVG world map
@@ -36,7 +36,7 @@ Very small probabilities use scientific notation (see `src/lib/format.ts`).
 
 ## Data freshness
 
-The dashboard shows **Data as of &lt;time&gt;** next to the header and above the globe. Lists auto-refresh **every 2 minutes** from NASA/JPL. SBDB orbits are fetched per selected object (cached ~5 minutes). Live sky position + minute series for the focused meteor come from JPL Horizons (cached ~90s) and drive the scrubbable time bar when available. Estimates can change when new observations arrive.
+The dashboard shows **Data as of &lt;time&gt;** next to the header and above the globe. Lists auto-refresh **every 2 minutes** from NASA/JPL. SBDB orbits are fetched per selected object (cached ~5 minutes). Live sky position + optional minute series for the focused meteor come from JPL Horizons (cached ~90s). The scrubbable time bar uses Sentry/SBDB first-obs → impact bounds; Horizons series is sampled only inside its short window. Estimates can change when new observations arrive.
 
 ## Data sources
 
