@@ -45,7 +45,7 @@ export const TIPS = {
   newBadge:
     "Appeared in the Sentry list after a later refresh on this device. Badge stays about 24 hours.",
   trajectory:
-    "Scrub or play from first observation to potential impact (Sentry/SBDB). Live sky HUD is separate JPL Horizons geocentric now — minute samples apply only if the scrubbed UTC falls inside the loaded Horizons window. Near Earth you see atmospheric approach; zoom out for the heliocentric orbit.",
+    "Scrub or play from first observation to potential impact (Sentry/SBDB). Heliocentric orbit position follows the scrubbed date via SBDB Kepler elements + epoch (educational two-body; not full N-body). Live sky HUD is separate JPL Horizons geocentric now — minute samples apply only if the scrubbed UTC falls inside the loaded Horizons window. Near-Earth approach is illustrative geometry ending at the potential impact date.",
   fireballs:
     "Bright meteors that already entered Earth’s atmosphere (past events from US sensors) — not the same as future Sentry risks.",
   fireballSpotted:

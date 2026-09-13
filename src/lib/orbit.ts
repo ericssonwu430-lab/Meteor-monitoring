@@ -1,7 +1,35 @@
 import * as THREE from "three";
 import type { OrbitElements } from "@/types/neo";
+import { parseLooseDate } from "@/lib/timelineDates";
 
 const DEG = Math.PI / 180;
+
+/** J2000.0 (approx UTC noon) — educational epoch for planetary mean elements. */
+export const PLANET_EPOCH = new Date(Date.UTC(2000, 0, 1, 12, 0, 0));
+
+/** Sidereal period in years from Kepler's 3rd law (P² ∝ a³, Sun ≈ 1). */
+export function orbitalPeriodYears(aAu: number): number {
+  const a = Math.max(0.05, Math.abs(aAu || 1));
+  return Math.sqrt(a * a * a);
+}
+
+/**
+ * Mean anomaly (degrees, wrapped 0..360) at `atDate` given elements at `epochDate`.
+ * Uses mean motion n = 360° / (P × 365.25 days).
+ */
+export function meanAnomalyDegreesAt(
+  el: Pick<OrbitElements, "a" | "ma">,
+  epochDate: Date,
+  atDate: Date
+): number {
+  const a = el.a ?? 1;
+  const ma0 = el.ma ?? 0;
+  const periodDays = orbitalPeriodYears(a) * 365.25;
+  const n = 360 / periodDays; // deg/day
+  const deltaDays = (atDate.getTime() - epochDate.getTime()) / 86_400_000;
+  const M = ma0 + n * deltaDays;
+  return ((M % 360) + 360) % 360;
+}
 
 /** Solve Kepler's equation M = E - e sin E (radians). */
 export function solveKepler(M: number, e: number, iters = 12): number {
@@ -21,25 +49,20 @@ export function trueAnomaly(E: number, e: number): number {
   return Math.atan2(sinNu, cosNu);
 }
 
-/**
- * Heliocentric ecliptic position (AU) from classic Keplerian elements.
- * Angles in degrees; a in AU. progress 0..1 maps mean anomaly offset.
- */
-export function keplerPosition(
-  el: Pick<OrbitElements, "a" | "e" | "i" | "om" | "w" | "ma">,
-  progress: number,
-  out = new THREE.Vector3()
+type KeplerAngles = Pick<OrbitElements, "a" | "e" | "i" | "om" | "w">;
+type KeplerEl = KeplerAngles &
+  Pick<OrbitElements, "ma"> & { epoch?: string | null };
+
+/** Heliocentric ecliptic → Three.js (y up): (x, z, -y). */
+function applyOrbitFrame(
+  el: KeplerAngles,
+  nu: number,
+  r: number,
+  out: THREE.Vector3
 ): THREE.Vector3 {
-  const a = el.a ?? 1;
-  const e = Math.min(0.99, Math.max(0, el.e ?? 0));
   const i = (el.i ?? 0) * DEG;
   const om = (el.om ?? 0) * DEG;
   const w = (el.w ?? 0) * DEG;
-  const ma0 = (el.ma ?? 0) * DEG;
-  const M = ma0 + progress * Math.PI * 2;
-  const E = solveKepler(M, e);
-  const nu = trueAnomaly(E, e);
-  const r = (a * (1 - e * e)) / (1 + e * Math.cos(nu));
   const x_orb = r * Math.cos(nu);
   const y_orb = r * Math.sin(nu);
 
@@ -58,8 +81,91 @@ export function keplerPosition(
     (-sinOm * sinW + cosOm * cosW * cosI) * y_orb;
   const z = sinW * sinI * x_orb + cosW * sinI * y_orb;
 
-  // Map ecliptic x,y,z → Three.js with y up: (x, z, -y)
   return out.set(x, z, -y);
+}
+
+/**
+ * Heliocentric ecliptic position (AU) from Keplerian elements + mean anomaly (deg).
+ */
+export function keplerPositionFromMeanAnomaly(
+  el: KeplerAngles,
+  meanAnomalyDeg: number,
+  out = new THREE.Vector3()
+): THREE.Vector3 {
+  const a = el.a ?? 1;
+  const e = Math.min(0.99, Math.max(0, el.e ?? 0));
+  const M = meanAnomalyDeg * DEG;
+  const E = solveKepler(M, e);
+  const nu = trueAnomaly(E, e);
+  const r = (a * (1 - e * e)) / (1 + e * Math.cos(nu));
+  return applyOrbitFrame(el, nu, r, out);
+}
+
+/**
+ * Sample a closed ellipse: progress 0..1 advances mean anomaly by one full lap
+ * from catalog ma (shape only — not timeline scrubbing).
+ */
+export function keplerPosition(
+  el: Pick<OrbitElements, "a" | "e" | "i" | "om" | "w" | "ma">,
+  progress: number,
+  out = new THREE.Vector3()
+): THREE.Vector3 {
+  const ma0 = el.ma ?? 0;
+  return keplerPositionFromMeanAnomaly(el, ma0 + progress * 360, out);
+}
+
+/**
+ * Resolve osculating epoch Date from element string or override.
+ */
+export function resolveEpochDate(
+  el: { epoch?: string | null },
+  epochOverride?: Date | null
+): Date | null {
+  if (epochOverride) return epochOverride;
+  if (el.epoch) return parseLooseDate(el.epoch);
+  return null;
+}
+
+/**
+ * Position at a calendar date using SBDB epoch + mean motion.
+ * When epoch or atDate is missing, freezes at catalog mean anomaly (no fake 0..1 lap).
+ */
+export function keplerPositionAtDate(
+  el: KeplerEl,
+  atDate: Date | null | undefined,
+  out = new THREE.Vector3(),
+  epochOverride?: Date | null
+): THREE.Vector3 {
+  const epochDate = resolveEpochDate(el, epochOverride);
+  if (epochDate && atDate && Number.isFinite(atDate.getTime())) {
+    const M = meanAnomalyDegreesAt(el, epochDate, atDate);
+    return keplerPositionFromMeanAnomaly(el, M, out);
+  }
+  return keplerPositionFromMeanAnomaly(el, el.ma ?? 0, out);
+}
+
+/**
+ * Mean-anomaly arc from timeline start (or epoch) → scrubbed date for TraceArc.
+ * deltaFrac is the forward fraction of one orbit (0..1), not multi-rev scribble.
+ */
+export function meanAnomalyArcBetweenDates(
+  el: KeplerEl,
+  startDate: Date | null | undefined,
+  atDate: Date | null | undefined,
+  epochOverride?: Date | null
+): { maStart: number; maAt: number; deltaFrac: number } {
+  const epochDate = resolveEpochDate(el, epochOverride);
+  const maCatalog = el.ma ?? 0;
+  if (!epochDate || !atDate || !Number.isFinite(atDate.getTime())) {
+    return { maStart: maCatalog, maAt: maCatalog, deltaFrac: 0 };
+  }
+  const from =
+    startDate && Number.isFinite(startDate.getTime()) ? startDate : epochDate;
+  const maStart = meanAnomalyDegreesAt(el, epochDate, from);
+  const maAt = meanAnomalyDegreesAt(el, epochDate, atDate);
+  let delta = maAt - maStart;
+  delta = ((delta % 360) + 360) % 360;
+  return { maStart, maAt, deltaFrac: delta / 360 };
 }
 
 /** Sample a closed Keplerian ellipse into Vector3 points (AU space). */
@@ -112,7 +218,6 @@ export const PLANET_ORBITS: PlanetDef[] = [
   { id: "uranus", name: "Uranus", color: "#67e8f9", size: 0.14, a: 19.191, e: 0.047, i: 0.8, om: 74.0, w: 96.5, ma: 142.2 },
   { id: "neptune", name: "Neptune", color: "#60a5fa", size: 0.13, a: 30.07, e: 0.009, i: 1.8, om: 131.8, w: 273.2, ma: 256.2 },
 ];
-
 
 /**
  * Compact educational scale so Mercury→Neptune fit in one frame.

@@ -1,17 +1,22 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, type MutableRefObject } from "react";
 import { Html, Line } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { OrbitElements, RiskEvent } from "@/types/neo";
 import {
   EARTH_ORBIT,
+  PLANET_EPOCH,
   PLANET_ORBITS,
   compactOrbitElements,
-  keplerPosition,
+  keplerPositionFromMeanAnomaly,
+  meanAnomalyArcBetweenDates,
+  meanAnomalyDegreesAt,
+  resolveEpochDate,
   sampleOrbitEllipse,
 } from "@/lib/orbit";
+import { interpolateDate } from "@/lib/timelineDates";
 import { formatImpactPercent } from "@/lib/format";
 import { hashString } from "@/lib/meteorTrack";
 
@@ -28,7 +33,9 @@ function displayName(r: RiskEvent): string {
   return r.des || r.id || "Unknown";
 }
 
-type KeplerEl = Pick<OrbitElements, "a" | "e" | "i" | "om" | "w" | "ma">;
+type KeplerEl = Pick<OrbitElements, "a" | "e" | "i" | "om" | "w" | "ma"> & {
+  epoch?: string | null;
+};
 
 /** Educational stand-in orbit when SBDB elements are missing. */
 export function fallbackNeoOrbit(des: string): KeplerEl {
@@ -38,10 +45,11 @@ export function fallbackNeoOrbit(des: string): KeplerEl {
   return {
     a,
     e: Math.min(0.85, e),
-    i: (h % 28),
+    i: h % 28,
     om: h % 360,
     w: (h * 7) % 360,
     ma: (h * 13) % 360,
+    epoch: null,
   };
 }
 
@@ -58,11 +66,48 @@ export function resolveOrbit(
         om: orbit.om ?? 0,
         w: orbit.w ?? 0,
         ma: orbit.ma ?? 0,
+        epoch: orbit.epoch ?? null,
       },
       approximate: false,
     };
   }
   return { el: fallbackNeoOrbit(des), approximate: true };
+}
+
+/** Scrubbed calendar date from timeline + live progressRef (smooth during Play). */
+function scrubbedAtDate(
+  timelineStart: Date | null | undefined,
+  timelineEnd: Date | null | undefined,
+  progress: number,
+  progressRef?: MutableRefObject<number>
+): Date | null {
+  const t =
+    progressRef && typeof progressRef.current === "number"
+      ? progressRef.current
+      : progress;
+  return interpolateDate(
+    timelineStart ?? null,
+    timelineEnd ?? null,
+    Math.min(1, Math.max(0, t))
+  );
+}
+
+/**
+ * Display position: mean anomaly from true-a + epoch; radius on compact scale.
+ */
+function keplerDisplayAtDate(
+  trueEl: KeplerEl,
+  atDate: Date | null,
+  out: THREE.Vector3,
+  epochOverride?: Date | null
+): THREE.Vector3 {
+  const displayEl = compactOrbitElements(trueEl);
+  const epochDate = resolveEpochDate(trueEl, epochOverride);
+  if (epochDate && atDate && Number.isFinite(atDate.getTime())) {
+    const M = meanAnomalyDegreesAt(trueEl, epochDate, atDate);
+    return keplerPositionFromMeanAnomaly(displayEl, M, out);
+  }
+  return keplerPositionFromMeanAnomaly(displayEl, trueEl.ma ?? 0, out);
 }
 
 function ScaledOrbitLine({
@@ -79,7 +124,10 @@ function ScaledOrbitLine({
   dashed?: boolean;
 }) {
   const points = useMemo(() => {
-    return sampleOrbitEllipse(el, 180).map((p) => p.multiplyScalar(AU_SCALE));
+    const displayEl = compactOrbitElements(el);
+    return sampleOrbitEllipse(displayEl, 180).map((p) =>
+      p.multiplyScalar(AU_SCALE)
+    );
   }, [el]);
 
   if (opacity < 0.02) return null;
@@ -102,6 +150,10 @@ function ScaledOrbitLine({
 function KeplerBody({
   el,
   progress,
+  progressRef,
+  timelineStart,
+  timelineEnd,
+  epochOverride,
   color,
   size,
   label,
@@ -117,6 +169,10 @@ function KeplerBody({
 }: {
   el: KeplerEl;
   progress: number;
+  progressRef?: MutableRefObject<number>;
+  timelineStart?: Date | null;
+  timelineEnd?: Date | null;
+  epochOverride?: Date | null;
   color: string;
   size: number;
   label: string;
@@ -132,7 +188,13 @@ function KeplerBody({
 
   useFrame(() => {
     if (!ref.current) return;
-    keplerPosition(el, progress, pos);
+    const at = scrubbedAtDate(
+      timelineStart,
+      timelineEnd,
+      progress,
+      progressRef
+    );
+    keplerDisplayAtDate(el, at, pos, epochOverride);
     pos.multiplyScalar(AU_SCALE);
     ref.current.position.copy(pos);
     ref.current.visible = opacity > 0.02;
@@ -199,30 +261,53 @@ function KeplerBody({
   );
 }
 
-/** Bright arc from perihelion progress 0 → current for selected meteors. */
+/** Bright arc along the orbit from timeline start (or epoch) → scrubbed date. */
 function TraceArc({
   el,
   progress,
+  timelineStart,
+  timelineEnd,
+  epochOverride,
   color,
   opacity,
   lineWidth,
 }: {
   el: KeplerEl;
   progress: number;
+  timelineStart?: Date | null;
+  timelineEnd?: Date | null;
+  epochOverride?: Date | null;
   color: string;
   opacity: number;
   lineWidth: number;
 }) {
   const points = useMemo(() => {
-    const t = Math.min(1, Math.max(0.02, progress));
-    const segs = Math.max(8, Math.ceil(t * 96));
+    const at = interpolateDate(
+      timelineStart ?? null,
+      timelineEnd ?? null,
+      Math.min(1, Math.max(0, progress))
+    );
+    const { maStart, deltaFrac } = meanAnomalyArcBetweenDates(
+      el,
+      timelineStart,
+      at,
+      epochOverride
+    );
+    const frac = Math.min(1, Math.max(0.02, deltaFrac > 0 ? deltaFrac : 0.02));
+    const segs = Math.max(8, Math.ceil(frac * 96));
+    const displayEl = compactOrbitElements(el);
     const pts: THREE.Vector3[] = [];
     for (let i = 0; i <= segs; i++) {
-      const p = keplerPosition(el, (i / segs) * t, new THREE.Vector3());
+      const M = maStart + (i / segs) * frac * 360;
+      const p = keplerPositionFromMeanAnomaly(
+        displayEl,
+        M,
+        new THREE.Vector3()
+      );
       pts.push(p.multiplyScalar(AU_SCALE));
     }
     return pts;
-  }, [el, progress]);
+  }, [el, progress, timelineStart, timelineEnd, epochOverride]);
 
   if (opacity < 0.02 || points.length < 2) return null;
 
@@ -243,6 +328,11 @@ type Props = {
   selectedIds: string[];
   primaryId?: string | null;
   progress: number;
+  progressRef?: MutableRefObject<number>;
+  /** First observation (timeline bar start). */
+  timelineStart?: Date | null;
+  /** Potential impact (timeline bar end). */
+  timelineEnd?: Date | null;
   orbits: Record<string, OrbitElements>;
   /** 0 = hidden (Earth close-up), 1 = fully visible (zoomed out) */
   fade?: number;
@@ -259,6 +349,9 @@ export default function SolarSystemView({
   selectedIds,
   primaryId,
   progress,
+  progressRef,
+  timelineStart = null,
+  timelineEnd = null,
   orbits,
   fade = 1,
   showEarthBody = true,
@@ -322,65 +415,70 @@ export default function SolarSystemView({
         )}
       </group>
 
-      {/* Major planets + orbit rings */}
+      {/* Major planets + orbit rings — positions follow scrubbed timeline date */}
       {showPlanets &&
         PLANET_ORBITS.map((p) => {
-        const el: KeplerEl = compactOrbitElements({
-          a: p.a,
-          e: p.e,
-          i: p.i,
-          om: p.om,
-          w: p.w,
-          ma: p.ma,
-        });
-        const isEarth = p.id === "earth";
-        // Slightly oversized markers so all 8 planets read clearly
-        const sizeBoost =
-          p.id === "jupiter"
-            ? 0.32
-            : p.id === "saturn"
-              ? 0.28
-              : p.id === "uranus" || p.id === "neptune"
-                ? 0.2
-                : Math.max(0.11, p.size * 1.35);
-        if (isEarth && !showEarthBody) {
+          const el: KeplerEl = {
+            a: p.a,
+            e: p.e,
+            i: p.i,
+            om: p.om,
+            w: p.w,
+            ma: p.ma,
+            epoch: null,
+          };
+          const isEarth = p.id === "earth";
+          // Slightly oversized markers so all 8 planets read clearly
+          const sizeBoost =
+            p.id === "jupiter"
+              ? 0.32
+              : p.id === "saturn"
+                ? 0.28
+                : p.id === "uranus" || p.id === "neptune"
+                  ? 0.2
+                  : Math.max(0.11, p.size * 1.35);
+          if (isEarth && !showEarthBody) {
+            return (
+              <ScaledOrbitLine
+                key={p.id}
+                el={el}
+                color={p.color}
+                opacity={0.7 * opacity}
+                lineWidth={2.2}
+              />
+            );
+          }
           return (
-            <ScaledOrbitLine
-              key={p.id}
-              el={el}
-              color={p.color}
-              opacity={0.7 * opacity}
-              lineWidth={2.2}
-            />
+            <group key={p.id}>
+              <ScaledOrbitLine
+                el={el}
+                color={p.color}
+                opacity={(isEarth ? 0.7 : 0.5) * opacity}
+                lineWidth={isEarth ? 2.2 : 1.6}
+              />
+              <KeplerBody
+                el={el}
+                progress={progress}
+                progressRef={progressRef}
+                timelineStart={timelineStart}
+                timelineEnd={timelineEnd}
+                epochOverride={PLANET_EPOCH}
+                color={p.color}
+                size={sizeBoost}
+                label={p.name}
+                opacity={opacity}
+                showLabel={opacity > 0.65}
+                constantLabel
+              />
+            </group>
           );
-        }
-        return (
-          <group key={p.id}>
-            <ScaledOrbitLine
-              el={el}
-              color={p.color}
-              opacity={(isEarth ? 0.7 : 0.5) * opacity}
-              lineWidth={isEarth ? 2.2 : 1.6}
-            />
-            <KeplerBody
-              el={el}
-              progress={0}
-              color={p.color}
-              size={sizeBoost}
-              label={p.name}
-              opacity={opacity}
-              showLabel={opacity > 0.65}
-              constantLabel
-            />
-          </group>
-        );
-      })}
+        })}
 
       {/* Selected NEO heliocentric orbits + moving bodies */}
       {selectedRisks.map((r) => {
         const id = riskId(r);
         const resolved = resolveOrbit(r.des, orbits[r.des]);
-        const el = compactOrbitElements(resolved.el);
+        const el = resolved.el;
         const approximate = resolved.approximate;
         const highlighted = id === primaryId;
         const orbitColor = highlighted ? "#fb923c" : "#94a3b8";
@@ -396,7 +494,9 @@ export default function SolarSystemView({
             />
             <TraceArc
               el={el}
-              progress={Math.max(progress, 0.02)}
+              progress={progress}
+              timelineStart={timelineStart}
+              timelineEnd={timelineEnd}
               color={highlighted ? "#fbbf24" : "#cbd5e1"}
               opacity={(highlighted ? 1 : 0.75) * Math.max(opacity, 0.35)}
               lineWidth={highlighted ? 5.5 : 3}
@@ -404,6 +504,9 @@ export default function SolarSystemView({
             <KeplerBody
               el={el}
               progress={progress}
+              progressRef={progressRef}
+              timelineStart={timelineStart}
+              timelineEnd={timelineEnd}
               color={bodyColor}
               size={highlighted ? 0.18 : 0.1}
               label={
@@ -423,10 +526,19 @@ export default function SolarSystemView({
   );
 }
 
-/** Earth heliocentric position in scene units (progress 0). */
+/**
+ * Earth heliocentric position in scene units at optional calendar date
+ * (educational Kepler from J2000 mean elements).
+ */
 export function earthHeliocentricPosition(
-  out = new THREE.Vector3()
+  out = new THREE.Vector3(),
+  atDate?: Date | null
 ): THREE.Vector3 {
-  keplerPosition(compactOrbitElements(EARTH_ORBIT), 0, out);
+  keplerDisplayAtDate(
+    { ...EARTH_ORBIT, epoch: null },
+    atDate ?? null,
+    out,
+    PLANET_EPOCH
+  );
   return out.multiplyScalar(AU_SCALE);
 }

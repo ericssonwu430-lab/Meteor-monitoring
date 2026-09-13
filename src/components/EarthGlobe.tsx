@@ -39,7 +39,13 @@ import SolarSystemView, {
   earthHeliocentricPosition,
   resolveOrbit,
 } from "@/components/SolarSystemView";
-import { compactOrbitElements, keplerPosition } from "@/lib/orbit";
+import {
+  compactOrbitElements,
+  keplerPositionFromMeanAnomaly,
+  meanAnomalyDegreesAt,
+  resolveEpochDate,
+} from "@/lib/orbit";
+import { interpolateDate } from "@/lib/timelineDates";
 
 const EARTH_RADIUS = 1;
 const MAX_METEORS = 40;
@@ -73,6 +79,10 @@ type Props = {
   progress?: number;
   /** Live progress for smooth 3D (avoids React re-render every frame) */
   progressRef?: MutableRefObject<number>;
+  /** Timeline bar start (first observation). */
+  timelineStart?: Date | null;
+  /** Timeline bar end (potential impact). */
+  timelineEnd?: Date | null;
   playing?: boolean;
   orbits?: Record<string, OrbitElements>;
   orbitsLoading?: boolean;
@@ -910,6 +920,8 @@ function FollowCamera({
   playing,
   progress,
   progressRef,
+  timelineStart,
+  timelineEnd,
   primaryTrack,
   primaryDes,
   orbits,
@@ -921,6 +933,8 @@ function FollowCamera({
   playing: boolean;
   progress: number;
   progressRef?: MutableRefObject<number>;
+  timelineStart?: Date | null;
+  timelineEnd?: Date | null;
   primaryTrack: MeteorTrack | null;
   primaryDes?: string | null;
   orbits: Record<string, OrbitElements>;
@@ -1041,14 +1055,27 @@ function FollowCamera({
         : progress;
     const t = Math.min(1, Math.max(0, raw));
 
-    // Heliocentric position along the (compact) orbit ellipse
+    // Heliocentric position from scrubbed timeline date (SBDB epoch + mean motion)
     const des = primaryDes || primaryTrack.des || primaryTrack.id;
     const { el } = resolveOrbit(des, orbits[des]);
-    const cel = compactOrbitElements(el);
-    keplerPosition(cel, t, solarPos.current);
+    const atDate = interpolateDate(
+      timelineStart ?? null,
+      timelineEnd ?? null,
+      t
+    );
+    const displayEl = compactOrbitElements(el);
+    const epochDate = resolveEpochDate(el);
+    if (epochDate && atDate) {
+      const M = meanAnomalyDegreesAt(el, epochDate, atDate);
+      keplerPositionFromMeanAnomaly(displayEl, M, solarPos.current);
+    } else {
+      // Missing epoch/SBDB: freeze at catalog ma (hashed approx still draws)
+      keplerPositionFromMeanAnomaly(displayEl, el.ma ?? 0, solarPos.current);
+    }
     solarPos.current.multiplyScalar(AU_SCALE);
 
-    // Near-Earth atmospheric approach (end of the story)
+    // Near-Earth Bezier approach: same timeline progress; end = impact at t=1
+    // (illustrative atmospheric geometry — not a predicted ground track)
     bezierPoint(
       primaryTrack.start,
       primaryTrack.mid,
@@ -1072,8 +1099,8 @@ function FollowCamera({
     );
 
     // Auto-zoom: wide solar frame at the start → tight Earth at the end
-    const a = cel.a ?? 1;
-    const e = cel.e ?? 0;
+    const a = displayEl.a ?? 1;
+    const e = displayEl.e ?? 0;
     const orbitSpan = a * AU_SCALE * (1 + e);
     const solarFar = Math.min(110, Math.max(36, orbitSpan * 2.1));
     const earthNear = 2.15;
@@ -1150,6 +1177,8 @@ function SceneContent({
   playing,
   progress,
   progressRef,
+  timelineStart,
+  timelineEnd,
   orbits,
   onLodChange,
   blendRef,
@@ -1165,6 +1194,8 @@ function SceneContent({
   playing: boolean;
   progress: number;
   progressRef?: MutableRefObject<number>;
+  timelineStart?: Date | null;
+  timelineEnd?: Date | null;
   orbits: Record<string, OrbitElements>;
   onLodChange?: Props["onLodChange"];
   blendRef: MutableRefObject<number>;
@@ -1190,11 +1221,29 @@ function SceneContent({
     );
   }, [tracks, visibleTracks, primaryId]);
 
-  const earthPos = useMemo(() => earthHeliocentricPosition(), []);
+  const earthPos = useMemo(() => earthHeliocentricPosition(new THREE.Vector3(), null), []);
+  const earthGroupRef = useRef<THREE.Group>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const followActiveRef = useRef(false);
   const earthYawRef = useRef(0);
   const [blend, setBlend] = useState(0);
+
+  // Keep Earth LOD seat on the educational Kepler orbit for the scrubbed date
+  useFrame(() => {
+    const t =
+      progressRef && typeof progressRef.current === "number"
+        ? progressRef.current
+        : progress;
+    const at = interpolateDate(
+      timelineStart ?? null,
+      timelineEnd ?? null,
+      Math.min(1, Math.max(0, t))
+    );
+    earthHeliocentricPosition(earthPos, at);
+    if (earthGroupRef.current) {
+      earthGroupRef.current.position.copy(earthPos);
+    }
+  });
 
   // Mirror blendRef into React state at a low rate for material opacity
   const lastBlendUi = useRef(0);
@@ -1253,6 +1302,8 @@ function SceneContent({
         playing={playing && !paused}
         progress={progress}
         progressRef={progressRef}
+        timelineStart={timelineStart}
+        timelineEnd={timelineEnd}
         primaryTrack={primaryTrack}
         primaryDes={
           risks.find((r) => (r.id || r.des) === primaryId)?.des ??
@@ -1273,6 +1324,9 @@ function SceneContent({
         selectedIds={selectedIds}
         primaryId={primaryId}
         progress={progress}
+        progressRef={progressRef}
+        timelineStart={timelineStart}
+        timelineEnd={timelineEnd}
         orbits={orbits}
         fade={solarFade}
         showEarthBody={showSolarEarth}
@@ -1281,7 +1335,7 @@ function SceneContent({
       />
 
       {/* Near-Earth LOD — textured globe + atmospheric trails at Earth's heliocentric seat */}
-      <group position={earthPos}>
+      <group ref={earthGroupRef} position={earthPos}>
         <ambientLight intensity={1.05 * earthFade} />
         <hemisphereLight
           args={["#ffffff", "#3d5a3d", 0.85 * earthFade]}
@@ -1383,6 +1437,8 @@ export default function EarthGlobe({
   className,
   progress = 0,
   progressRef,
+  timelineStart = null,
+  timelineEnd = null,
   playing = false,
   orbits = {},
   orbitsLoading = false,
@@ -1397,7 +1453,10 @@ export default function EarthGlobe({
 
   const activeIds = useMemo(() => selectedIds ?? [], [selectedIds]);
 
-  const earthPos = useMemo(() => earthHeliocentricPosition(), []);
+  const earthPos = useMemo(
+    () => earthHeliocentricPosition(new THREE.Vector3(), null),
+    []
+  );
   const camPos = useMemo(
     (): [number, number, number] => [
       earthPos.x,
@@ -1573,6 +1632,8 @@ export default function EarthGlobe({
               playing={playing}
               progress={progress}
               progressRef={progressRef}
+              timelineStart={timelineStart}
+              timelineEnd={timelineEnd}
               orbits={orbits}
               onLodChange={handleLod}
               blendRef={blendRef}

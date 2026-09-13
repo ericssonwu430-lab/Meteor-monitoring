@@ -36,7 +36,7 @@ Very small probabilities use scientific notation (see `src/lib/format.ts`).
 
 ## Data freshness
 
-The dashboard shows **Data as of &lt;time&gt;** next to the header and above the globe. Lists auto-refresh **every 2 minutes** from NASA/JPL. SBDB orbits are fetched per selected object (cached ~5 minutes). Live sky position + optional minute series for the focused meteor come from JPL Horizons (cached ~90s). The scrubbable time bar uses Sentry/SBDB first-obs → impact bounds; Horizons series is sampled only inside its short window. Estimates can change when new observations arrive.
+The dashboard shows **Data as of &lt;time&gt;** next to the header and above the globe. Lists auto-refresh **every 2 minutes** from NASA/JPL. SBDB orbits are fetched per selected object (cached ~5 minutes). Live sky position + optional minute series for the focused meteor come from JPL Horizons (cached ~90s). The scrubbable time bar uses Sentry/SBDB first-obs → impact bounds; heliocentric NEO/planet positions follow the scrubbed date via SBDB Kepler elements + epoch (educational); Horizons series is sampled only inside its short window. Estimates can change when new observations arrive.
 
 ## Data sources
 

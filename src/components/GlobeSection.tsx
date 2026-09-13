@@ -575,7 +575,7 @@ export default function GlobeSection({
   }, [scrubbedDate, nowProgress, nowTick]);
 
   const timelineCaption =
-    "Time bar: first observation → potential impact (Sentry/SBDB). Live sky HUD is separate JPL Horizons geocentric now.";
+    "Time bar: first observation → potential impact (Sentry/SBDB). Orbit position follows the scrubbed date via SBDB Kepler elements + epoch (educational; not full N-body). Near-Earth path is illustrative geometry ending at potential impact. Live sky HUD is separate JPL Horizons geocentric now.";
 
   useEffect(() => {
     const dess = Array.from(
@@ -613,6 +613,7 @@ export default function GlobeSection({
             orbitClassCode: null,
             designation: null,
             fullname: null,
+            epoch: null,
             firstObs: null,
             lastObs: null,
             dataArc: null,
@@ -636,6 +637,7 @@ export default function GlobeSection({
             orbitClassCode: null,
             designation: null,
             fullname: null,
+            epoch: null,
             firstObs: null,
             lastObs: null,
             dataArc: null,
@@ -735,6 +737,8 @@ export default function GlobeSection({
           primaryId={primaryId}
           progress={progress}
           progressRef={progressRef}
+          timelineStart={timelineDates.start}
+          timelineEnd={timelineDates.end}
           playing={playing}
           orbits={orbits}
           orbitsLoading={orbitsLoading}

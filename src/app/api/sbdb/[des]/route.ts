@@ -31,6 +31,7 @@ export async function GET(
           orbitClassCode: null,
           designation: null,
           fullname: null,
+          epoch: null,
           firstObs: null,
           lastObs: null,
           dataArc: null,
