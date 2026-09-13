@@ -22,8 +22,15 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import type { Fireball, OrbitElements, RiskEvent } from "@/types/neo";
-import { formatImpactPercent } from "@/lib/format";
+import type { Fireball, HorizonsEphemeris, OrbitElements, RiskEvent } from "@/types/neo";
+import {
+  formatApparentMag,
+  formatDecShort,
+  formatDistanceKmCompact,
+  formatImpactPercent,
+  formatRaShort,
+} from "@/lib/format";
+import { raDecToSubstellar } from "@/lib/skyDirection";
 import { hashString, impactLatLonForDes, seededUnit } from "@/lib/meteorTrack";
 import SolarSystemView, {
   AU_SCALE,
@@ -67,6 +74,9 @@ type Props = {
   playing?: boolean;
   orbits?: Record<string, OrbitElements>;
   orbitsLoading?: boolean;
+  /** Live Horizons geocentric ephemeris for the focused meteor */
+  ephemeris?: HorizonsEphemeris | null;
+  ephemerisLoading?: boolean;
   /** Fires when continuous-zoom LOD changes */
   onLodChange?: (info: { blend: number; distance: number; mode: LodMode }) => void;
 };
@@ -116,6 +126,56 @@ function latLonToVec3(lat: number, lon: number, radius: number): THREE.Vector3 {
   const z = radius * Math.sin(phi) * Math.sin(theta);
   const y = radius * Math.cos(phi);
   return new THREE.Vector3(x, y, z);
+}
+
+/**
+ * Subtle line from Earth along the live RA/Dec equatorial direction
+ * (Earth-fixed via GMST). Real geometry — not a seeded impact country.
+ */
+function SkyDirection({
+  lat,
+  lon,
+  opacity,
+}: {
+  lat: number;
+  lon: number;
+  opacity: number;
+}) {
+  const pts = useMemo(() => {
+    const dir = latLonToVec3(lat, lon, 1).normalize();
+    return [
+      dir.clone().multiplyScalar(EARTH_RADIUS * 1.05),
+      dir.clone().multiplyScalar(EARTH_RADIUS * 2.15),
+    ];
+  }, [lat, lon]);
+  const tip = useMemo(() => {
+    const dir = latLonToVec3(lat, lon, 1).normalize();
+    const q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    return { pos: dir.multiplyScalar(EARTH_RADIUS * 2.18), q };
+  }, [lat, lon]);
+  if (opacity < 0.08) return null;
+  return (
+    <group>
+      <Line
+        points={pts}
+        color="#67e8f9"
+        lineWidth={1.4}
+        transparent
+        opacity={0.55 * opacity}
+        depthWrite={false}
+      />
+      <mesh position={tip.pos} quaternion={tip.q}>
+        <coneGeometry args={[0.028, 0.08, 8]} />
+        <meshBasicMaterial
+          color="#67e8f9"
+          transparent
+          opacity={0.7 * opacity}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
 }
 
 function displayName(r: RiskEvent): string {
@@ -1091,6 +1151,7 @@ function SceneContent({
   orbits,
   onLodChange,
   blendRef,
+  ephemeris,
 }: {
   risks: RiskEvent[];
   fireballs: Fireball[];
@@ -1105,6 +1166,7 @@ function SceneContent({
   orbits: Record<string, OrbitElements>;
   onLodChange?: Props["onLodChange"];
   blendRef: MutableRefObject<number>;
+  ephemeris?: HorizonsEphemeris | null;
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const tracks = useMemo(() => {
@@ -1150,6 +1212,20 @@ function SceneContent({
   const showSolarEarth = blend > 0.55;
   // Hold continents near end of approach scrub for overview framing
   const impactOverviewHold = progress >= 0.92;
+
+  const skyPoint = useMemo(() => {
+    if (
+      !ephemeris ||
+      ephemeris.raHours == null ||
+      ephemeris.decDeg == null ||
+      !Number.isFinite(ephemeris.raHours) ||
+      !Number.isFinite(ephemeris.decDeg)
+    ) {
+      return null;
+    }
+    const when = ephemeris.asOf ? new Date(ephemeris.asOf) : new Date();
+    return raDecToSubstellar(ephemeris.raHours, ephemeris.decDeg, when);
+  }, [ephemeris]);
 
   return (
     <>
@@ -1266,6 +1342,13 @@ function SceneContent({
               opacity={earthFade}
             />
           )}
+          {skyPoint && (
+            <SkyDirection
+              lat={skyPoint.lat}
+              lon={skyPoint.lon}
+              opacity={earthFade}
+            />
+          )}
         </EarthSpinGroup>
       </group>
 
@@ -1301,6 +1384,8 @@ export default function EarthGlobe({
   playing = false,
   orbits = {},
   orbitsLoading = false,
+  ephemeris = null,
+  ephemerisLoading = false,
   onLodChange,
 }: Props) {
   const [paused, setPaused] = useState(false);
@@ -1414,6 +1499,32 @@ export default function EarthGlobe({
               </>
             )}
           </div>
+          {ephemeris && (
+            <div className="rounded-md border border-cyan-700/35 bg-slate-950/75 px-1.5 py-0.5 font-mono text-[8px] leading-tight text-slate-200 shadow-md shadow-black/40 backdrop-blur-sm sm:text-[9px]">
+              <div>
+                <span className="text-slate-500">Δ </span>
+                <span className="font-semibold text-cyan-300">
+                  {formatDistanceKmCompact(ephemeris.distanceKm)}
+                </span>
+                <span className="mx-0.5 text-slate-600">·</span>
+                <span className="text-slate-500">mag </span>
+                <span className="font-semibold text-cyan-300">
+                  {formatApparentMag(ephemeris.magnitude)}
+                </span>
+              </div>
+              {ephemeris.raHours != null && ephemeris.decDeg != null && (
+                <div className="text-slate-400">
+                  {formatRaShort(ephemeris.raHours)}{" "}
+                  {formatDecShort(ephemeris.decDeg)}
+                </div>
+              )}
+            </div>
+          )}
+          {ephemerisLoading && !ephemeris && (
+            <div className="rounded-md border border-slate-700/50 bg-slate-950/70 px-1.5 py-0.5 font-mono text-[8px] text-slate-500">
+              Horizons…
+            </div>
+          )}
         </div>
       )}
 
@@ -1453,6 +1564,7 @@ export default function EarthGlobe({
               orbits={orbits}
               onLodChange={handleLod}
               blendRef={blendRef}
+              ephemeris={ephemeris}
             />
           </Suspense>
         </Canvas>
@@ -1466,6 +1578,7 @@ export default function EarthGlobe({
                 showFireballs ? ` · ${fbCount} fireballs` : ""
               }`}
           {orbitsLoading ? " · loading SBDB…" : ""}
+          {ephemeris ? " · Horizons sky dir" : ephemerisLoading ? " · Horizons…" : ""}
           {paused ? " · tab paused" : ""}
         </span>
       </div>

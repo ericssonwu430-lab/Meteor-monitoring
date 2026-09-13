@@ -199,3 +199,21 @@ export interface OrbitElements {
   available: boolean;
   error?: string;
 }
+
+/** Live geocentric observer ephemeris from JPL Horizons */
+export interface HorizonsEphemeris {
+  des: string;
+  name: string;
+  constellation: string;
+  constellationAbbr?: string;
+  distanceKm: number;
+  ra: string;
+  dec: string;
+  raHours?: number;
+  decDeg?: number;
+  magnitude: number | null;
+  asOf: string;
+  source: "JPL Horizons";
+  deltaAu?: number;
+  error?: string;
+}

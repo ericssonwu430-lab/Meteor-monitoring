@@ -74,4 +74,16 @@ export const TIPS = {
     "The meteor currently highlighted for details and camera follow.",
   neoMonitor:
     "Live near-Earth object risk dashboard fed by public NASA/JPL sources.",
+  liveSky:
+    "Where the object is in Earth's sky right now from JPL Horizons — geocentric apparent RA/Dec, distance, and V magnitude. Not a predicted impact site or country.",
+  horizons:
+    "NASA/JPL Horizons computes precise positions of solar-system bodies. This app requests an Earth-centered (geocentric) observer table. Visitor location is never used.",
+  apparentCoords:
+    "Apparent right ascension and declination as seen from Earth's center (light-time included). These are sky coordinates, not a ground track or impact country.",
+  constellation:
+    "Approximate IAU constellation from the apparent RA/Dec (Roman 1987 boundaries at B1875, precessed from J2000). A sky region — not a place on Earth.",
+  apparentMagnitude:
+    "Approximate apparent visual magnitude from Horizons (IAU H-G). Larger numbers are fainter.",
+  geocentricDistance:
+    "Current range from Earth's center to the object (Horizons delta), converted from AU to kilometers.",
 } as const;

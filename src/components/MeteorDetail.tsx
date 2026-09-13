@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { OrbitElements, RiskEvent } from "@/types/neo";
+import type { HorizonsEphemeris, OrbitElements, RiskEvent } from "@/types/neo";
 import InfoTip, { LabelWithInfo } from "@/components/InfoTip";
 import { TIPS } from "@/lib/glossary";
 import { LABELS } from "@/lib/labels";
 import {
+  formatApparentMag,
   formatDiameterKm,
+  formatDistanceKm,
   formatImpactPercent,
   formatPalermo,
   torinoColor,
@@ -19,6 +21,9 @@ type Props = {
   /** When provided (including null), skip internal SBDB fetch */
   orbit?: OrbitElements | null;
   loading?: boolean;
+  ephemeris?: HorizonsEphemeris | null;
+  ephemerisLoading?: boolean;
+  ephemerisError?: string | null;
 };
 
 function displayName(r: RiskEvent): string {
@@ -36,11 +41,22 @@ function buildBlurb(r: RiskEvent, orbit: OrbitElements | null): string {
   return `Near-Earth object tracked by NASA/JPL Sentry; cumulative Earth impact probability ${ip} over ${r.range || "its VI window"}. Orbit-class origin from SBDB is unavailable — showing Sentry risk fields only.`;
 }
 
+function Amber({ children }: { children: string }) {
+  return <span className="font-medium text-amber-300">{children}</span>;
+}
+
+function Cyan({ children }: { children: string }) {
+  return <span className="font-mono text-cyan-300">{children}</span>;
+}
+
 export default function MeteorDetail({
   risk,
   className,
   orbit: orbitProp,
   loading: loadingProp,
+  ephemeris = null,
+  ephemerisLoading = false,
+  ephemerisError = null,
 }: Props) {
   const controlled = orbitProp !== undefined || loadingProp !== undefined;
   const [orbitLocal, setOrbit] = useState<OrbitElements | null>(null);
@@ -272,6 +288,63 @@ export default function MeteorDetail({
                 </dd>
               </div>
             </dl>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-cyan-900/40 bg-slate-900/60 p-2.5">
+          <LabelWithInfo
+            tip={TIPS.liveSky}
+            className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90"
+          >
+            {LABELS.liveSky}
+          </LabelWithInfo>
+          {ephemerisLoading && !ephemeris && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Loading live sky position from {LABELS.horizons}…
+            </p>
+          )}
+          {!ephemerisLoading && !ephemeris && (
+            <p className="mt-1 text-[11px] text-amber-200/80">
+              Live sky position unavailable
+              {ephemerisError ? `: ${ephemerisError}` : " — Horizons could not resolve this designation"}.
+            </p>
+          )}
+          {ephemeris && (
+            <>
+              <p className="mt-1.5 leading-relaxed text-[11px] text-slate-300">
+                <Amber>{ephemeris.name}</Amber>
+                {" is in the constellation of "}
+                <Amber>{ephemeris.constellation}</Amber>
+                {", at a distance of "}
+                <Cyan>{formatDistanceKm(ephemeris.distanceKm)}</Cyan>
+                {" kilometers from Earth. The current Right Ascension is "}
+                <Cyan>{ephemeris.ra}</Cyan>
+                {" and the Declination is "}
+                <Cyan>{ephemeris.dec}</Cyan>
+                {" ("}
+                <span className="inline-flex items-center gap-1">
+                  apparent coordinates
+                  <InfoTip
+                    text={TIPS.apparentCoords}
+                    label={`About ${LABELS.apparentCoords}`}
+                  />
+                </span>
+                {"). The magnitude of "}
+                <Amber>{ephemeris.name}</Amber>
+                {" is "}
+                <Cyan>{formatApparentMag(ephemeris.magnitude)}</Cyan>
+                {"."}
+              </p>
+              <p className="mt-1.5 text-[10px] text-slate-500">
+                Live apparent geocentric from{" "}
+                <span className="text-slate-400">{LABELS.horizons}</span>
+                {" · as of "}
+                <span className="font-mono text-cyan-400/90">
+                  {formatDisplayDate(ephemeris.asOf)}
+                </span>
+                {" · constellation is approximate from apparent RA/Dec"}
+              </p>
+            </>
           )}
         </div>
 

@@ -47,3 +47,47 @@ export function torinoColor(ts: string | number | null | undefined): string {
   if (n >= 1) return "bg-emerald-500 text-black";
   return "bg-slate-600 text-slate-200";
 }
+
+export function formatDistanceKm(km: number | null | undefined): string {
+  if (km == null || !Number.isFinite(km)) return "—";
+  return km.toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
+export function formatDistanceKmCompact(km: number | null | undefined): string {
+  if (km == null || !Number.isFinite(km)) return "—";
+  const abs = Math.abs(km);
+  if (abs >= 1e6) return `${(km / 1e6).toFixed(2)}M km`;
+  if (abs >= 1e3) return `${(km / 1e3).toFixed(0)}k km`;
+  return `${km.toFixed(0)} km`;
+}
+
+export function formatApparentMag(mag: number | null | undefined): string {
+  if (mag == null || !Number.isFinite(mag)) return "—";
+  return mag.toFixed(2);
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+export function formatRaShort(hours: number | null | undefined): string {
+  if (hours == null || !Number.isFinite(hours)) return "—";
+  const h = ((hours % 24) + 24) % 24;
+  const hh = Math.floor(h + 1e-9);
+  const mm = Math.round((h - hh) * 60);
+  if (mm === 60) return `${pad2((hh + 1) % 24)}h 00m`;
+  return `${pad2(hh)}h ${pad2(mm)}m`;
+}
+
+export function formatDecShort(deg: number | null | undefined): string {
+  if (deg == null || !Number.isFinite(deg)) return "—";
+  const sign = deg >= 0 ? "+" : "-";
+  const abs = Math.abs(deg);
+  const dd = Math.floor(abs + 1e-9);
+  const mm = Math.round((abs - dd) * 60);
+  if (mm === 60) return `${sign}${dd + 1}° 00′`;
+  return `${sign}${dd}° ${pad2(mm)}′`;
+}

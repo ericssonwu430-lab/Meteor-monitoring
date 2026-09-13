@@ -49,4 +49,12 @@ export const LABELS = {
   cad: "Close Approach Data (CAD)",
   loadingFeeds:
     "Loading Sentry Impact Risk, Close Approach Data (CAD), Fireballs, and Small-Body Database (SBDB)…",
+  liveSky: "Live Sky Position (Horizons)",
+  horizons: "JPL Horizons",
+  apparentCoords: "Apparent Coordinates (RA/Dec)",
+  rightAscension: "Right Ascension (RA)",
+  declination: "Declination (Dec)",
+  apparentMagnitude: "Apparent Magnitude (V)",
+  geocentricDistance: "Geocentric Distance (Δ)",
+  constellation: "Constellation (approx.)",
 } as const;

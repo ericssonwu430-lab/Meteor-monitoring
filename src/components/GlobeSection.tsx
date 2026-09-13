@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type {
   CloseApproach,
   Fireball,
+  HorizonsEphemeris,
   OrbitElements,
   RiskEvent,
   SentryDetailResponse,
@@ -119,6 +120,9 @@ export default function GlobeSection({
     null
   );
   const sentryCache = useRef<Record<string, SentryDetailResponse>>({});
+  const [ephemeris, setEphemeris] = useState<HorizonsEphemeris | null>(null);
+  const [ephemerisLoading, setEphemerisLoading] = useState(false);
+  const [ephemerisError, setEphemerisError] = useState<string | null>(null);
 
   const idsKey = useMemo(
     () => cardRisks.map(riskId).join("|"),
@@ -260,6 +264,53 @@ export default function GlobeSection({
     })();
     return () => {
       cancelled = true;
+    };
+  }, [primaryRisk?.des]);
+
+  // Live geocentric sky position from JPL Horizons — refresh on focused meteor.
+  useEffect(() => {
+    if (!primaryRisk?.des) {
+      setEphemeris(null);
+      setEphemerisError(null);
+      setEphemerisLoading(false);
+      return;
+    }
+    const des = primaryRisk.des;
+    let cancelled = false;
+    setEphemeris(null);
+    setEphemerisError(null);
+    setEphemerisLoading(true);
+    const load = async () => {
+      setEphemerisLoading(true);
+      try {
+        const res = await fetch(`/api/ephemeris/${encodeURIComponent(des)}`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok || json.error || json.distanceKm == null) {
+          setEphemeris(null);
+          setEphemerisError(
+            typeof json.error === "string"
+              ? json.error
+              : "Horizons could not resolve this designation"
+          );
+          return;
+        }
+        setEphemeris(json as HorizonsEphemeris);
+        setEphemerisError(null);
+      } catch {
+        if (!cancelled) {
+          setEphemeris(null);
+          setEphemerisError("Horizons fetch failed");
+        }
+      } finally {
+        if (!cancelled) setEphemerisLoading(false);
+      }
+    };
+    load();
+    const id = window.setInterval(load, 15 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
     };
   }, [primaryRisk?.des]);
 
@@ -443,6 +494,8 @@ export default function GlobeSection({
           playing={playing}
           orbits={orbits}
           orbitsLoading={orbitsLoading}
+          ephemeris={ephemeris}
+          ephemerisLoading={ephemerisLoading}
           onLodChange={({ mode }) => setLodMode(mode)}
         />
         {/* Slim timeline directly under globe */}
@@ -582,6 +635,9 @@ export default function GlobeSection({
                     !!orbitLoading[primaryRisk.des] &&
                     !orbits[primaryRisk.des]
                   }
+                  ephemeris={ephemeris}
+                  ephemerisLoading={ephemerisLoading}
+                  ephemerisError={ephemerisError}
                   className=""
                 />
                 {top && (
@@ -668,7 +724,7 @@ export default function GlobeSection({
                   <p className="text-xs text-slate-500">
                     Auto-refresh every 2 minutes · NASA/JPL {LABELS.sentry} ·{" "}
                     {LABELS.cad} · {LABELS.fireballs} · {LABELS.sbdb} per
-                    selection
+                    selection · {LABELS.horizons} sky position per focused meteor
                   </p>
                 </div>
                 <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">

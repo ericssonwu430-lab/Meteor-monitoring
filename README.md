@@ -20,6 +20,7 @@ npm run build && npm start
 - **Play → camera follow + auto-zoom** on the primary meteor (drag overrides; Play resumes)
 - **Timeline dates** in `dd/mm/yyyy` from Sentry/SBDB (no geographic impact country for Sentry NEOs — NASA does not publish that)
 - **Origin + brief details** (orbit class, elements, observation arc) from SBDB + Sentry
+- **Live sky position** on Details + globe HUD from JPL Horizons (geocentric RA/Dec, distance, V mag; approximate constellation)
 - Object detail page with virtual-impactor table
 - Close approaches (CAD, next 60 days, ≤ 0.05 AU)
 - Recent fireballs on a simple SVG world map
@@ -35,7 +36,7 @@ Very small probabilities use scientific notation (see `src/lib/format.ts`).
 
 ## Data freshness
 
-The dashboard shows **Data as of &lt;time&gt;** next to the header and above the globe. Lists auto-refresh **every 2 minutes** from NASA/JPL. SBDB orbits are fetched per selected object (cached ~5 minutes). Estimates can change when new observations arrive.
+The dashboard shows **Data as of &lt;time&gt;** next to the header and above the globe. Lists auto-refresh **every 2 minutes** from NASA/JPL. SBDB orbits are fetched per selected object (cached ~5 minutes). Live sky position for the focused meteor comes from JPL Horizons (cached ~30 minutes) and is labeled with its as-of time. Estimates can change when new observations arrive.
 
 ## Data sources
 
@@ -49,6 +50,7 @@ Proxied via Next.js route handlers (`revalidate` ~90–300s):
 | `/api/fireballs` | `fireball.api?limit=50` |
 | `/api/sbdb/[des]` | `sbdb.api?sstr=` |
 | `/api/geocode` | OpenStreetMap Nominatim reverse (fireball lat/lon only; cached) |
+| `/api/ephemeris/[des]` | JPL Horizons observer table (`CENTER=500@399`, RA/Dec/V/delta; ~30 min cache) |
 
 Attribution: **NASA/JPL Solar System Dynamics** APIs. This app is for education/monitoring — not official emergency alerting.
 
