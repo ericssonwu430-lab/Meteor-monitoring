@@ -36,7 +36,10 @@ import {
   formatRaHms,
   AU_KM,
   C_KM_S,
+  ephemerisFromSample,
+  interpolateHorizonsSeries,
 } from "@/lib/horizons";
+import type { HorizonsSample } from "@/types/neo";
 
 /** Poll primary object only — respect Horizons rate limits. */
 const EPHEMERIS_POLL_MS = 45_000;
@@ -116,7 +119,15 @@ const EarthGlobe = dynamic(() => import("@/components/EarthGlobe"), {
 });
 
 const DEFAULT_SELECT = 3;
+/** Full Sentry/VI decades scrub duration at 1× (fallback timeline). */
 const LOOP_SECONDS = 8;
+/**
+ * When scrubbing Horizons minute series: ephemeris minutes advanced per
+ * wall-clock second at 1× (30 min/s → ~48s for a 24h −6h…+18h window).
+ */
+const HORIZONS_MINUTES_PER_SECOND = 30;
+/** Treat scrubbed time within this of wall-clock as "live / now". */
+const NEAR_NOW_MS = 90_000;
 
 type TabId = "meteors" | "details" | "activity" | "about";
 
@@ -199,6 +210,7 @@ export default function GlobeSection({
   const [ephemeris, setEphemeris] = useState<HorizonsEphemeris | null>(null);
   const [ephemerisLoading, setEphemerisLoading] = useState(false);
   const [ephemerisError, setEphemerisError] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const idsKey = useMemo(
     () => cardRisks.map(riskId).join("|"),
@@ -344,6 +356,7 @@ export default function GlobeSection({
   }, [primaryRisk?.des]);
 
   // Live geocentric sky from JPL Horizons — primary object only, ~45s poll.
+  // Response includes a minute-level series for the scrub window when available.
   useEffect(() => {
     if (!primaryRisk?.des) {
       setEphemeris(null);
@@ -362,9 +375,7 @@ export default function GlobeSection({
     setEphemerisLoading(true);
 
     const load = async (bust: boolean) => {
-      if (bust) {
-        // Keep showing last sample while refreshing
-      } else {
+      if (!bust) {
         setEphemerisLoading(true);
       }
       try {
@@ -397,6 +408,25 @@ export default function GlobeSection({
           }
           return next;
         });
+        // Snap scrubber to "now" when series first arrives for this object
+        if (
+          !bust &&
+          Array.isArray(next.series) &&
+          next.series.length > 0 &&
+          next.windowStart &&
+          next.windowEnd
+        ) {
+          const startMs = Date.parse(next.windowStart);
+          const endMs = Date.parse(next.windowEnd);
+          if (Number.isFinite(startMs) && endMs > startMs) {
+            const nowFrac = Math.min(
+              1,
+              Math.max(0, (Date.now() - startMs) / (endMs - startMs))
+            );
+            progressRef.current = nowFrac;
+            setProgress(nowFrac);
+          }
+        }
         setEphemerisError(null);
       } catch {
         if (!cancelled && !bust) {
@@ -418,12 +448,70 @@ export default function GlobeSection({
     };
   }, [primaryRisk?.des]);
 
-  // Smooth TheSkyLive-like ticking between Horizons polls (still Horizons-based).
+  const horizonsSeries: HorizonsSample[] | null = useMemo(() => {
+    const s = ephemerisRaw?.series;
+    return Array.isArray(s) && s.length > 0 ? s : null;
+  }, [ephemerisRaw]);
+
+  const horizonsWindow = useMemo(() => {
+    if (
+      !ephemerisRaw?.windowStart ||
+      !ephemerisRaw?.windowEnd ||
+      !horizonsSeries
+    ) {
+      return null;
+    }
+    const start = new Date(ephemerisRaw.windowStart);
+    const end = new Date(ephemerisRaw.windowEnd);
+    if (
+      !Number.isFinite(start.getTime()) ||
+      !Number.isFinite(end.getTime()) ||
+      end.getTime() <= start.getTime()
+    ) {
+      return null;
+    }
+    return { start, end };
+  }, [ephemerisRaw, horizonsSeries]);
+
+  // Series present: display ephemeris from scrubbed UTC. Else: poll blend.
   useEffect(() => {
     if (!ephemerisRaw) {
       setEphemeris(null);
       return;
     }
+
+    if (horizonsSeries && horizonsWindow) {
+      const apply = () => {
+        const startMs = horizonsWindow.start.getTime();
+        const endMs = horizonsWindow.end.getTime();
+        const tMs =
+          startMs +
+          (endMs - startMs) * Math.min(1, Math.max(0, progressRef.current));
+        const sample = interpolateHorizonsSeries(horizonsSeries, tMs);
+        if (!sample) {
+          setEphemeris(ephemerisRaw);
+          return;
+        }
+        setEphemeris(
+          ephemerisFromSample(
+            {
+              des: ephemerisRaw.des,
+              name: ephemerisRaw.name,
+              source: ephemerisRaw.source,
+              windowStart: ephemerisRaw.windowStart,
+              windowEnd: ephemerisRaw.windowEnd,
+              stepMinutes: ephemerisRaw.stepMinutes,
+              series: ephemerisRaw.series,
+            },
+            sample
+          )
+        );
+      };
+      apply();
+      const id = window.setInterval(apply, INTERP_TICK_MS);
+      return () => window.clearInterval(id);
+    }
+
     const tick = () => {
       const now = Date.now();
       const prev = ephemerisPrevRef.current;
@@ -436,9 +524,9 @@ export default function GlobeSection({
     tick();
     const id = window.setInterval(tick, INTERP_TICK_MS);
     return () => window.clearInterval(id);
-  }, [ephemerisRaw]);
+  }, [ephemerisRaw, horizonsSeries, horizonsWindow, progress]);
 
-  const timelineDates = useMemo(
+  const sentryTimelineDates = useMemo(
     () =>
       deriveTimelineDates(
         primaryRisk,
@@ -448,14 +536,61 @@ export default function GlobeSection({
     [primaryRisk, sentryDetail, orbits]
   );
 
-  const labelMid = useMemo(() => {
-    const d = interpolateDate(
+  const timelineDates = useMemo(() => {
+    if (horizonsWindow) {
+      const { start, end } = horizonsWindow;
+      return {
+        start,
+        end,
+        labelStart: formatDdMmYyyy(start, { time: true }),
+        labelEnd: formatDdMmYyyy(end, { time: true }),
+        horizons: true as const,
+      };
+    }
+    return { ...sentryTimelineDates, horizons: false as const };
+  }, [horizonsWindow, sentryTimelineDates]);
+
+  const scrubbedDate = useMemo(() => {
+    return interpolateDate(
       timelineDates.start,
       timelineDates.end,
       progress
     );
-    return d ? formatDdMmYyyy(d) : undefined;
   }, [timelineDates, progress]);
+
+  const labelMid = useMemo(() => {
+    if (!scrubbedDate) return undefined;
+    return formatDdMmYyyy(scrubbedDate, {
+      time: timelineDates.horizons,
+    });
+  }, [scrubbedDate, timelineDates.horizons]);
+
+  // Tick so the "now" marker / live badge stay aligned with wall clock.
+  useEffect(() => {
+    if (!horizonsWindow) return;
+    setNowTick(Date.now());
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [horizonsWindow]);
+
+  const nowProgress = useMemo(() => {
+    if (!horizonsWindow) return null;
+    const startMs = horizonsWindow.start.getTime();
+    const endMs = horizonsWindow.end.getTime();
+    return Math.min(
+      1,
+      Math.max(0, (nowTick - startMs) / (endMs - startMs))
+    );
+  }, [horizonsWindow, nowTick]);
+
+  const nearNow = useMemo(() => {
+    if (!scrubbedDate || !timelineDates.horizons) return false;
+    return Math.abs(scrubbedDate.getTime() - nowTick) <= NEAR_NOW_MS;
+  }, [scrubbedDate, timelineDates.horizons, nowTick]);
+
+  const timelineCaption = timelineDates.horizons
+    ? "Time bar: JPL Horizons geocentric ephemeris (minute samples, UTC) — not Sentry VI decades."
+    : undefined;
 
   useEffect(() => {
     const dess = Array.from(
@@ -547,8 +682,18 @@ export default function GlobeSection({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!document.hidden) {
-        const next =
-          progressRef.current + (dt * playbackSpeed) / LOOP_SECONDS;
+        let next: number;
+        if (horizonsWindow) {
+          // Advance in real ephemeris time: minutes-per-second × speed
+          const windowMs =
+            horizonsWindow.end.getTime() - horizonsWindow.start.getTime();
+          const advanceMs =
+            dt * playbackSpeed * HORIZONS_MINUTES_PER_SECOND * 60_000;
+          next = progressRef.current + advanceMs / windowMs;
+        } else {
+          next =
+            progressRef.current + (dt * playbackSpeed) / LOOP_SECONDS;
+        }
         if (next >= 1) {
           // End of time bar: clamp, stop (no loop). EarthGlobe zooms out.
           progressRef.current = 1;
@@ -567,7 +712,7 @@ export default function GlobeSection({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, playbackSpeed]);
+  }, [playing, playbackSpeed, horizonsWindow]);
 
   const orbitsLoading = useMemo(() => {
     if (!primaryRisk) {
@@ -644,6 +789,9 @@ export default function GlobeSection({
           labelStart={timelineDates.labelStart}
           labelMid={labelMid}
           labelEnd={timelineDates.labelEnd}
+          nowProgress={nowProgress}
+          nearNow={nearNow}
+          caption={timelineCaption}
           disabled={selectedList.length === 0}
           compact
           className="overflow-visible rounded-b-xl"

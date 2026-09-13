@@ -16,6 +16,12 @@ type Props = {
   labelStart?: string;
   labelMid?: string;
   labelEnd?: string;
+  /** 0–1 position of wall-clock "now" within the scrub window (Horizons). */
+  nowProgress?: number | null;
+  /** When scrubbed time is near wall-clock now. */
+  nearNow?: boolean;
+  /** Optional caption under the bar (e.g. Horizons vs Sentry). */
+  caption?: string;
   disabled?: boolean;
   className?: string;
   compact?: boolean;
@@ -37,6 +43,9 @@ export default function TrajectoryTimeline({
   labelStart,
   labelMid,
   labelEnd,
+  nowProgress = null,
+  nearNow = false,
+  caption,
   disabled,
   className,
   compact,
@@ -49,6 +58,10 @@ export default function TrajectoryTimeline({
     labelEnd ??
     (solarish ? "Full orbit" : "Impact zone");
   const mid = labelMid;
+  const nowPct =
+    nowProgress != null && Number.isFinite(nowProgress)
+      ? Math.min(1, Math.max(0, nowProgress)) * 100
+      : null;
 
   return (
     <div
@@ -87,29 +100,55 @@ export default function TrajectoryTimeline({
           </button>
 
           <div className="min-w-0 flex-1">
-            <input
-              type="range"
-              min={0}
-              max={1000}
-              step={1}
-              disabled={disabled}
-              value={Math.round(progress * 1000)}
-              onChange={(e) => {
-                onPlayingChange(false);
-                onProgressChange(parseInt(e.target.value, 10) / 1000);
-              }}
-              aria-label="Scrub trajectory"
-              className="traj-range w-full cursor-pointer disabled:cursor-not-allowed"
-            />
+            <div className="relative">
+              {nowPct != null && (
+                <div
+                  className="pointer-events-none absolute top-1/2 z-0 h-3 w-px -translate-y-1/2 bg-lime-400/70"
+                  style={{ left: `calc(${nowPct}% - 0.5px)` }}
+                  title="Now (UTC)"
+                  aria-hidden
+                />
+              )}
+              <input
+                type="range"
+                min={0}
+                max={1000}
+                step={1}
+                disabled={disabled}
+                value={Math.round(progress * 1000)}
+                onChange={(e) => {
+                  onPlayingChange(false);
+                  onProgressChange(parseInt(e.target.value, 10) / 1000);
+                }}
+                aria-label="Scrub trajectory"
+                className="traj-range relative z-10 w-full cursor-pointer disabled:cursor-not-allowed"
+              />
+            </div>
             <div className="flex justify-between gap-1 text-[10px] text-slate-500">
               <span className="min-w-0 truncate font-mono tabular-nums">{start}</span>
               <span className="shrink-0 font-mono text-slate-600">
-                {mid ? mid : `${pct}%`}
+                {mid ? (
+                  <span className="inline-flex items-center gap-1">
+                    {nearNow && (
+                      <span className="rounded bg-lime-500/20 px-1 text-[9px] font-semibold uppercase tracking-wide text-lime-300">
+                        live
+                      </span>
+                    )}
+                    {mid}
+                  </span>
+                ) : (
+                  `${pct}%`
+                )}
               </span>
               <span className="min-w-0 truncate text-right font-mono tabular-nums">
                 {end}
               </span>
             </div>
+            {caption && (
+              <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                {caption}
+              </p>
+            )}
           </div>
         </div>
       </div>

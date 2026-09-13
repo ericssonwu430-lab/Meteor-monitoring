@@ -200,6 +200,16 @@ export interface OrbitElements {
   error?: string;
 }
 
+/** One minute-level (or step) geocentric Horizons sample for scrubbing. */
+export interface HorizonsSample {
+  /** Sample time (UTC ISO). */
+  asOf: string;
+  raHours: number;
+  decDeg: number;
+  deltaAu: number;
+  magnitude: number | null;
+}
+
 /** Live geocentric observer ephemeris from JPL Horizons */
 export interface HorizonsEphemeris {
   des: string;
@@ -219,4 +229,12 @@ export interface HorizonsEphemeris {
   asOf: string;
   source: "JPL Horizons";
   error?: string;
+  /** Scrubbable live window start (UTC ISO), when series is present. */
+  windowStart?: string;
+  /** Scrubbable live window end (UTC ISO), when series is present. */
+  windowEnd?: string;
+  /** Step size used for series (minutes). */
+  stepMinutes?: number;
+  /** Minute-level (or coarser) samples spanning windowStart…windowEnd. */
+  series?: HorizonsSample[];
 }

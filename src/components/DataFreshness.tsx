@@ -31,7 +31,7 @@ export default function DataFreshness({ updatedAt, className }: Props) {
         Auto-refreshes every 2 minutes from NASA/JPL{" "}
         {LABELS.sentry}, {LABELS.cad}, and {LABELS.fireballs}.{" "}
         {LABELS.sbdb} orbits load per selected object (~5 min cache).{" "}
-        {LABELS.horizons} live sky position loads for the focused meteor (~30 min cache).
+        {LABELS.horizons} live sky + minute series load for the focused meteor (~90s cache).
         Impact estimates can change when new observations arrive.
       </p>
     </div>

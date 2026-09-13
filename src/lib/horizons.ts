@@ -4,7 +4,7 @@
  */
 
 import { constellationFromRaDec } from "@/lib/constellation";
-import type { HorizonsEphemeris } from "@/types/neo";
+import type { HorizonsEphemeris, HorizonsSample } from "@/types/neo";
 
 export const AU_KM = 149597870.7;
 /** Speed of light in km/s (exact IAU value used for light-travel time). */
@@ -186,23 +186,156 @@ export type FetchHorizonsOptions = {
   bustCache?: boolean;
 };
 
-/**
- * Query a ~2h window around `when` at 10-minute steps and return the
- * sample closest to wall-clock now (TheSkyLive-style "live" geocentric).
- */
-export async function fetchHorizonsObserver(
-  des: string,
-  when = new Date(),
-  options: FetchHorizonsOptions = {}
-): Promise<HorizonsEphemeris> {
-  const clean = sanitizeDes(des);
-  if (!clean) {
-    throw new HorizonsResolveError("Missing designation");
+/** Live scrub window: −6h … +18h around `when` (24h total). */
+export const HORIZONS_WINDOW_PAST_MS = 6 * 60 * 60 * 1000;
+export const HORIZONS_WINDOW_FUTURE_MS = 18 * 60 * 60 * 1000;
+
+function lerpRa(a: number, b: number, t: number): number {
+  let d = b - a;
+  if (d > 12) d -= 24;
+  if (d < -12) d += 24;
+  return ((a + d * t) % 24 + 24) % 24;
+}
+
+type InterpFields = {
+  raHours: number;
+  decDeg: number;
+  deltaAu: number;
+  magnitude: number | null;
+  asOfDate: Date;
+};
+
+function interpolateParsedRows(
+  rows: ParsedRow[],
+  targetMs: number
+): InterpFields {
+  let before: ParsedRow | null = null;
+  let after: ParsedRow | null = null;
+  let closest = rows[0];
+  let closestAbs = Math.abs(closest.asOf.getTime() - targetMs);
+
+  for (const row of rows) {
+    const t = row.asOf.getTime();
+    const abs = Math.abs(t - targetMs);
+    if (abs < closestAbs) {
+      closest = row;
+      closestAbs = abs;
+    }
+    if (t <= targetMs) {
+      if (!before || t > before.asOf.getTime()) before = row;
+    }
+    if (t >= targetMs) {
+      if (!after || t < after.asOf.getTime()) after = row;
+    }
   }
 
-  // ~1h window around now at 1-minute steps; interpolate to Date.now().
-  const startMs = when.getTime() - 20 * 60 * 1000;
-  const stopMs = when.getTime() + 40 * 60 * 1000;
+  if (before && after && before !== after) {
+    const t0 = before.asOf.getTime();
+    const t1 = after.asOf.getTime();
+    const u = t1 === t0 ? 0 : (targetMs - t0) / (t1 - t0);
+    const clampU = Math.min(1, Math.max(0, u));
+    const magnitude =
+      before.magnitude != null && after.magnitude != null
+        ? before.magnitude + (after.magnitude - before.magnitude) * clampU
+        : (after.magnitude ?? before.magnitude);
+    return {
+      raHours: lerpRa(before.raHours, after.raHours, clampU),
+      decDeg: before.decDeg + (after.decDeg - before.decDeg) * clampU,
+      deltaAu: before.deltaAu + (after.deltaAu - before.deltaAu) * clampU,
+      magnitude,
+      asOfDate: new Date(targetMs),
+    };
+  }
+
+  return {
+    raHours: closest.raHours,
+    decDeg: closest.decDeg,
+    deltaAu: closest.deltaAu,
+    magnitude: closest.magnitude,
+    asOfDate: closest.asOf,
+  };
+}
+
+function sampleFromParsed(row: ParsedRow): HorizonsSample {
+  return {
+    asOf: row.asOf.toISOString(),
+    raHours: row.raHours,
+    decDeg: row.decDeg,
+    deltaAu: row.deltaAu,
+    magnitude: row.magnitude,
+  };
+}
+
+/**
+ * Interpolate a Horizons series at an arbitrary UTC instant (client scrub).
+ * Returns RA/Dec/delta/mag + asOf ISO; constellation is left to the caller.
+ */
+export function interpolateHorizonsSeries(
+  series: HorizonsSample[],
+  targetMs: number
+): HorizonsSample | null {
+  if (!series.length) return null;
+  const rows: ParsedRow[] = series.map((s) => ({
+    asOf: new Date(s.asOf),
+    raHours: s.raHours,
+    decDeg: s.decDeg,
+    deltaAu: s.deltaAu,
+    magnitude: s.magnitude,
+  }));
+  if (rows.some((r) => !Number.isFinite(r.asOf.getTime()))) return null;
+  const hit = interpolateParsedRows(rows, targetMs);
+  return {
+    asOf: hit.asOfDate.toISOString(),
+    raHours: hit.raHours,
+    decDeg: hit.decDeg,
+    deltaAu: hit.deltaAu,
+    magnitude: hit.magnitude,
+  };
+}
+
+/** Build a display HorizonsEphemeris from an interpolated sample + metadata. */
+export function ephemerisFromSample(
+  base: Pick<HorizonsEphemeris, "des" | "name" | "source"> &
+    Partial<
+      Pick<
+        HorizonsEphemeris,
+        "windowStart" | "windowEnd" | "stepMinutes" | "series"
+      >
+    >,
+  sample: HorizonsSample
+): HorizonsEphemeris {
+  const distanceKm = sample.deltaAu * AU_KM;
+  const lightTravelSeconds = distanceKm / C_KM_S;
+  const hit = constellationFromRaDec(sample.raHours, sample.decDeg);
+  return {
+    des: base.des,
+    name: base.name,
+    constellation: hit.name,
+    constellationAbbr: hit.abbr,
+    distanceKm,
+    deltaAu: sample.deltaAu,
+    lightTravelSeconds,
+    ra: formatRaHms(sample.raHours),
+    dec: formatDecDms(sample.decDeg),
+    raHours: sample.raHours,
+    decDeg: sample.decDeg,
+    magnitude: sample.magnitude,
+    asOf: sample.asOf,
+    source: base.source ?? "JPL Horizons",
+    windowStart: base.windowStart,
+    windowEnd: base.windowEnd,
+    stepMinutes: base.stepMinutes,
+    series: base.series,
+  };
+}
+
+async function queryHorizonsRows(
+  clean: string,
+  startMs: number,
+  stopMs: number,
+  stepLabel: string,
+  options: FetchHorizonsOptions
+): Promise<{ result: string; rows: ParsedRow[] }> {
   const start = formatHorizonsTime(new Date(startMs));
   const stop = formatHorizonsTime(new Date(stopMs));
 
@@ -215,7 +348,7 @@ export async function fetchHorizonsObserver(
     CENTER: q("500@399"),
     START_TIME: q(start),
     STOP_TIME: q(stop),
-    STEP_SIZE: q("1 m"),
+    STEP_SIZE: q(stepLabel),
     QUANTITIES: q("1,9,20"),
     ANG_FORMAT: q("HMS"),
     CSV_FORMAT: q("YES"),
@@ -275,61 +408,61 @@ export async function fetchHorizonsObserver(
       `Horizons row for ${clean} was incomplete`
     );
   }
+  return { result, rows };
+}
 
+/**
+ * Query a scrubbable live window (−6h … +18h) at 1-minute steps (5 m fallback)
+ * and return the interpolated "now" point plus the full series.
+ */
+export async function fetchHorizonsObserver(
+  des: string,
+  when = new Date(),
+  options: FetchHorizonsOptions = {}
+): Promise<HorizonsEphemeris> {
+  const clean = sanitizeDes(des);
+  if (!clean) {
+    throw new HorizonsResolveError("Missing designation");
+  }
+
+  const windowStartMs = when.getTime() - HORIZONS_WINDOW_PAST_MS;
+  const windowEndMs = when.getTime() + HORIZONS_WINDOW_FUTURE_MS;
+
+  let stepMinutes = 1;
+  let result: string;
+  let rows: ParsedRow[];
+  try {
+    const hit = await queryHorizonsRows(
+      clean,
+      windowStartMs,
+      windowEndMs,
+      "1 m",
+      options
+    );
+    result = hit.result;
+    rows = hit.rows;
+    stepMinutes = 1;
+  } catch (e) {
+    if (e instanceof HorizonsResolveError) throw e;
+    // Prefer 1 m; if Horizons rejects the large table, fall back to 5 m.
+    const hit = await queryHorizonsRows(
+      clean,
+      windowStartMs,
+      windowEndMs,
+      "5 m",
+      options
+    );
+    result = hit.result;
+    rows = hit.rows;
+    stepMinutes = 5;
+  }
+
+  const series = rows.map(sampleFromParsed);
   const targetMs = Date.now();
-  // Prefer bracketing rows so we can interpolate to exact "now"
-  let before: ParsedRow | null = null;
-  let after: ParsedRow | null = null;
-  let closest = rows[0];
-  let closestAbs = Math.abs(closest.asOf.getTime() - targetMs);
-
-  for (const row of rows) {
-    const t = row.asOf.getTime();
-    const abs = Math.abs(t - targetMs);
-    if (abs < closestAbs) {
-      closest = row;
-      closestAbs = abs;
-    }
-    if (t <= targetMs) {
-      if (!before || t > before.asOf.getTime()) before = row;
-    }
-    if (t >= targetMs) {
-      if (!after || t < after.asOf.getTime()) after = row;
-    }
-  }
-
-  let raHours: number;
-  let decDeg: number;
-  let deltaAu: number;
-  let magnitude: number | null;
-  let asOfDate: Date;
-
-  if (before && after && before !== after) {
-    const t0 = before.asOf.getTime();
-    const t1 = after.asOf.getTime();
-    const u = t1 === t0 ? 0 : (targetMs - t0) / (t1 - t0);
-    const clampU = Math.min(1, Math.max(0, u));
-    raHours = lerpRa(before.raHours, after.raHours, clampU);
-    decDeg = before.decDeg + (after.decDeg - before.decDeg) * clampU;
-    deltaAu = before.deltaAu + (after.deltaAu - before.deltaAu) * clampU;
-    if (before.magnitude != null && after.magnitude != null) {
-      magnitude =
-        before.magnitude + (after.magnitude - before.magnitude) * clampU;
-    } else {
-      magnitude = after.magnitude ?? before.magnitude;
-    }
-    asOfDate = new Date(targetMs);
-  } else {
-    raHours = closest.raHours;
-    decDeg = closest.decDeg;
-    deltaAu = closest.deltaAu;
-    magnitude = closest.magnitude;
-    asOfDate = closest.asOf;
-  }
-
-  const distanceKm = deltaAu * AU_KM;
+  const nowFields = interpolateParsedRows(rows, targetMs);
+  const distanceKm = nowFields.deltaAu * AU_KM;
   const lightTravelSeconds = distanceKm / C_KM_S;
-  const hit = constellationFromRaDec(raHours, decDeg);
+  const hit = constellationFromRaDec(nowFields.raHours, nowFields.decDeg);
 
   return {
     des: clean,
@@ -337,23 +470,20 @@ export async function fetchHorizonsObserver(
     constellation: hit.name,
     constellationAbbr: hit.abbr,
     distanceKm,
-    deltaAu,
+    deltaAu: nowFields.deltaAu,
     lightTravelSeconds,
-    ra: formatRaHms(raHours),
-    dec: formatDecDms(decDeg),
-    raHours,
-    decDeg,
-    magnitude,
-    asOf: asOfDate.toISOString(),
+    ra: formatRaHms(nowFields.raHours),
+    dec: formatDecDms(nowFields.decDeg),
+    raHours: nowFields.raHours,
+    decDeg: nowFields.decDeg,
+    magnitude: nowFields.magnitude,
+    asOf: nowFields.asOfDate.toISOString(),
     source: "JPL Horizons",
+    windowStart: new Date(windowStartMs).toISOString(),
+    windowEnd: new Date(windowEndMs).toISOString(),
+    stepMinutes,
+    series,
   };
-}
-
-function lerpRa(a: number, b: number, t: number): number {
-  let d = b - a;
-  if (d > 12) d -= 24;
-  if (d < -12) d += 24;
-  return ((a + d * t) % 24 + 24) % 24;
 }
 
 const MONTHS: Record<string, number> = {
